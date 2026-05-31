@@ -203,13 +203,13 @@ describe('wordService.updateUserWord', () => {
     const uw = await UserWord.create({ userId: user._id, wordId: w._id });
 
     const r = await wordService.updateUserWord(user._id, uw._id, {
-      notes: 'mes notes',
+      notes: 'my notes',
       tags: ['important'],
       favorite: true,
       searchCount: 999, // disallowed
     });
 
-    expect(r.notes).toBe('mes notes');
+    expect(r.notes).toBe('my notes');
     expect(r.tags).toEqual(['important']);
     expect(r.favorite).toBe(true);
     expect(r.searchCount).toBe(1); // unchanged

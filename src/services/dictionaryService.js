@@ -10,10 +10,10 @@ class DictionaryError extends Error {
 }
 
 /**
- * Récupère la définition d'un mot via l'API REST de Wiktionary FR.
- * Réponse Wiktionary: { fr: [ { partOfSpeech, language, definitions: [{ definition, examples }] } ] }
+ * Fetches the definition of a word via the Wiktionary FR REST API.
+ * Wiktionary response: { fr: [ { partOfSpeech, language, definitions: [{ definition, examples }] } ] }
  *
- * @param {string} word - mot déjà normalisé
+ * @param {string} word - already-normalized word
  * @returns {Promise<Array<{partOfSpeech, definition, examples}>>}
  * @throws {DictionaryError} code = NOT_FOUND | UPSTREAM_ERROR
  */
@@ -56,8 +56,8 @@ async function fetchDefinition(word) {
 }
 
 /**
- * Parse la réponse Wiktionary et extrait uniquement les définitions FR.
- * Strip les balises HTML basiques.
+ * Parses the Wiktionary response and extracts only French definitions.
+ * Strips basic HTML tags.
  */
 function parseWiktionaryResponse(data) {
   const frEntries = (data && data.fr) || [];

@@ -1,24 +1,24 @@
 # Dictionary App - Backend
 
-Backend Node.js / Express / MongoDB pour l'application Ionic de dictionnaire.
+Node.js / Express / MongoDB backend for the Ionic dictionary application.
 
 ## Architecture
 
-- **Cache mutualisé** : la collection `words` stocke chaque mot une seule fois (partagé entre utilisateurs).
-- **Liste personnelle** : la collection `userWords` lie chaque utilisateur à ses mots (notes, tags, favoris, historique).
-- **Flux de recherche** : cache → fallback API Wiktionary FR → insertion en cache → upsert dans la liste utilisateur.
+- **Shared cache**: the `words` collection stores each word only once (shared across users).
+- **Personal list**: the `userWords` collection links each user to their own words (notes, tags, favorites, history).
+- **Search flow**: cache → fallback to Wiktionary FR API → insert into cache → upsert into user list.
 
-## Prérequis
+## Prerequisites
 
 - Node.js 18+
-- MongoDB local OU Atlas (pour le dev/prod). Les tests utilisent `mongodb-memory-server` (aucune installation requise).
+- MongoDB local OR Atlas (for dev/prod). Tests use `mongodb-memory-server` (no installation required).
 
 ## Installation
 
 ```bash
 npm install
 cp .env.example .env
-# éditer .env (au minimum JWT_SECRET et MONGODB_URI)
+# edit .env (at minimum JWT_SECRET and MONGODB_URI)
 npm run dev
 ```
 
@@ -29,37 +29,37 @@ npm run dev
 - `POST /api/auth/login` → `{ email, password }` ⇒ `{ user, token }`
 - `GET /api/auth/me` (Bearer JWT) ⇒ `{ user }`
 
-### Mots (Bearer JWT obligatoire)
-- `GET /api/words/search?word=xxx` → cherche, cache, ajoute à la liste
-- `GET /api/words?page=1&limit=20&search=xxx` → liste paginée des mots de l'utilisateur
-- `GET /api/words/:id` → détail d'une entrée
-- `PATCH /api/words/:id` → met à jour notes / tags / favorite
-- `DELETE /api/words/:id` → retire de la liste personnelle
+### Words (Bearer JWT required)
+- `GET /api/words/search?word=xxx` → searches, caches, adds to the list
+- `GET /api/words?page=1&limit=20&search=xxx` → paginated list of the user's words
+- `GET /api/words/:id` → details of one entry
+- `PATCH /api/words/:id` → updates notes / tags / favorite
+- `DELETE /api/words/:id` → removes from the personal list
 
 ## Tests
 
 ```bash
-npm test                  # tous les tests
-npm run test:unit         # uniquement unitaires
-npm run test:integration  # uniquement intégration
-npm run test:coverage     # avec rapport de couverture
+npm test                  # all tests
+npm run test:unit         # unit tests only
+npm run test:integration  # integration tests only
+npm run test:coverage     # with coverage report
 ```
 
-Les tests utilisent **MongoDB en mémoire** (mongodb-memory-server) et **mockent l'API Wiktionary** : aucun appel réseau, aucune installation MongoDB requise.
+Tests use **in-memory MongoDB** (mongodb-memory-server) and **mock the Wiktionary API**: no network calls, no MongoDB installation required.
 
-### Couverture des tests
+### Test coverage
 
-**Unitaires** (`tests/unit/`)
-- `dictionaryService.test.js` : parser HTML, parser réponse Wiktionary, gestion erreurs API
-- `userModel.test.js` : hash bcrypt, validation, comparaison password, sérialisation JSON
-- `wordModel.test.js` : normalisation Unicode/case, unicité
-- `wordService.test.js` : scénario cache, isolation entre utilisateurs, race conditions, errors
-- `auth.test.js` : signature/vérification JWT, middleware d'authentification
+**Unit** (`tests/unit/`)
+- `dictionaryService.test.js`: HTML parser, Wiktionary response parser, API error handling
+- `userModel.test.js`: bcrypt hash, validation, password comparison, JSON serialization
+- `wordModel.test.js`: Unicode/case normalization, uniqueness
+- `wordService.test.js`: cache scenarios, isolation between users, race conditions, errors
+- `auth.test.js`: JWT signing/verification, authentication middleware
 
-**Intégration** (`tests/integration/`)
-- `auth.test.js` : register, login, me, validation, conflits
-- `words.test.js` : **scénario clé du cache mutualisé**, isolation, pagination, CRUD
-- `smoke.test.js` : healthcheck
+**Integration** (`tests/integration/`)
+- `auth.test.js`: register, login, me, validation, conflicts
+- `words.test.js`: **key shared-cache scenario**, isolation, pagination, CRUD
+- `smoke.test.js`: healthcheck
 
 ## Structure
 
@@ -75,10 +75,10 @@ backend/
 │   ├── utils/         jwt
 │   └── app.js
 ├── tests/
-│   ├── fixtures/      données de test (users, wiktionary)
+│   ├── fixtures/      test data (users, wiktionary)
 │   ├── unit/
 │   ├── integration/
-│   └── setup.js       MongoMemoryServer + nettoyage
+│   └── setup.js       MongoMemoryServer + cleanup
 ├── server.js
 └── .env.example
 ```

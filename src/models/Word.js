@@ -37,8 +37,8 @@ const wordSchema = new mongoose.Schema(
 );
 
 /**
- * Normalise un mot pour assurer l'unicité du cache.
- * - trim, lowercase, normalisation Unicode NFC.
+ * Normalizes a word to ensure cache uniqueness.
+ * - trim, lowercase, Unicode NFC normalization.
  */
 wordSchema.statics.normalize = function (raw) {
   if (typeof raw !== 'string') return '';

@@ -1,7 +1,7 @@
 {
   "name": "muttum-backend",
   "version": "1.0.0",
-  "description": "Backend Node.js pour application de dictionnaire Ionic",
+  "description": "Node.js backend for the Ionic dictionary application",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
