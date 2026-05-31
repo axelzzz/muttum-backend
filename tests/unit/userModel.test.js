@@ -35,17 +35,17 @@ describe('User model', () => {
   });
 
   it('enforces unique email', async () => {
-    const u1 = new User({ email: 'dup@x.com', username: 'A' });
+    const u1 = new User({ email: 'dup@x.com', username: 'Al' });
     u1.password = 'pass1234';
     await u1.save();
 
-    const u2 = new User({ email: 'dup@x.com', username: 'B' });
+    const u2 = new User({ email: 'dup@x.com', username: 'Bo' });
     u2.password = 'pass1234';
     await expect(u2.save()).rejects.toThrow();
   });
 
   it('lowercases the email', async () => {
-    const user = new User({ email: 'MIXED@Case.COM', username: 'X' });
+    const user = new User({ email: 'MIXED@Case.COM', username: 'Xi' });
     user.password = 'pass1234';
     await user.save();
     expect(user.email).toBe('mixed@case.com');

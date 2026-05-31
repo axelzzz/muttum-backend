@@ -31,7 +31,7 @@ userSchema.virtual('password').set(function (plain) {
   this._password = plain;
 });
 
-userSchema.pre('save', async function (next) {
+userSchema.pre('validate', async function (next) {
   if (this._password) {
     this.passwordHash = await bcrypt.hash(this._password, config.bcrypt.saltRounds);
     this._password = undefined;

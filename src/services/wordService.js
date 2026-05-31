@@ -63,12 +63,11 @@ async function searchAndTrack(rawWord, userId) {
     { userId, wordId: word._id },
     {
       $set: { lastSearchedAt: new Date() },
-      $inc: { searchCount: existing ? 1 : 0 },
+      $inc: { searchCount: 1 },
       $setOnInsert: {
         userId,
         wordId: word._id,
         firstSearchedAt: new Date(),
-        searchCount: 1,
       },
     },
     { upsert: true, new: true, setDefaultsOnInsert: true }
@@ -77,7 +76,7 @@ async function searchAndTrack(rawWord, userId) {
   return {
     word: word.word,
     wordId: word._id,
-    definitions: word.definitions,
+    definitions: word.toObject().definitions,
     source: word.source,
     fromCache,
     alreadyInList,
