@@ -3,8 +3,10 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
+const swaggerUi = require('swagger-ui-express');
 
 const config = require('./config');
+const swaggerSpec = require('./config/swagger');
 const authRoutes = require('./routes/authRoutes');
 const wordRoutes = require('./routes/wordRoutes');
 const errorHandler = require('./middlewares/errorHandler');
@@ -21,6 +23,10 @@ function createApp() {
   }
 
   app.get('/health', (req, res) => res.json({ status: 'ok' }));
+
+  if (config.nodeEnv !== 'production') {
+    app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+  }
 
   // Rate limit on auth endpoints (login/register) to mitigate brute force
   const authLimiter = rateLimit({
