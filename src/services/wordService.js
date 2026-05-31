@@ -3,11 +3,11 @@ const UserWord = require('../models/UserWord');
 const dictionaryService = require('./dictionaryService');
 
 /**
- * Recherche d'un mot avec :
- * 1. Recherche en cache (collection Word)
- * 2. Fallback API tierce si absent
- * 3. Insertion en cache si récupéré
- * 4. Upsert dans UserWord (ajout ou MAJ lastSearchedAt + searchCount)
+ * Searches for a word with:
+ * 1. Cache lookup (Word collection)
+ * 2. Third-party API fallback if missing
+ * 3. Insert into cache if fetched
+ * 4. Upsert into UserWord (add or update lastSearchedAt + searchCount)
  *
  * @returns {{ word, definitions, fromCache, alreadyInList }}
  */
@@ -85,7 +85,7 @@ async function searchAndTrack(rawWord, userId) {
 }
 
 /**
- * Liste paginée des mots de l'utilisateur (jointure UserWord ↔ Word).
+ * Paginated list of the user's words (join UserWord ↔ Word).
  */
 async function listUserWords(userId, { page = 1, limit = 20, search = '' } = {}) {
   const safePage = Math.max(1, parseInt(page, 10) || 1);

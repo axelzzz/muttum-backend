@@ -239,10 +239,10 @@ describe('PATCH /api/words/:id', () => {
     const res = await request(app)
       .patch(`/api/words/${id}`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ notes: 'mes notes', tags: ['important'], favorite: true });
+      .send({ notes: 'my notes', tags: ['important'], favorite: true });
 
     expect(res.status).toBe(200);
-    expect(res.body.notes).toBe('mes notes');
+    expect(res.body.notes).toBe('my notes');
     expect(res.body.tags).toEqual(['important']);
     expect(res.body.favorite).toBe(true);
   });
