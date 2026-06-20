@@ -19,7 +19,37 @@ Node.js / Express / MongoDB backend for the Ionic dictionary application.
 npm install
 cp .env.example .env
 # edit .env (at minimum JWT_SECRET and MONGODB_URI)
-npm run dev
+```
+
+## Starting locally
+
+### 1. Start MongoDB
+
+```bash
+mkdir -p /tmp/mongodb-data
+mongod --dbpath /tmp/mongodb-data --logpath /tmp/mongod.log --fork
+```
+
+This forks MongoDB in the background, storing data in `/tmp/mongodb-data`. Make sure `MONGODB_URI` in `.env` points to `mongodb://localhost:27017/<dbname>`.
+
+### 2. Start the server
+
+```bash
+npm start        # production-style (no auto-reload)
+npm run dev      # development mode with nodemon
+```
+
+The server listens on the port defined by `PORT` (default: 3000). A successful startup prints:
+
+```
+✓ MongoDB connected
+✓ Server listening on port 3000 (development)
+```
+
+### Stopping MongoDB
+
+```bash
+mongod --dbpath /tmp/mongodb-data --shutdown
 ```
 
 ## Endpoints
