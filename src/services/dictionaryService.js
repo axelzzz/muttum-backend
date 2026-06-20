@@ -1,6 +1,8 @@
 const axios = require('axios');
 const config = require('../config');
 
+const WIKTIONARY_TIMEOUT_MS = 8000;
+
 class DictionaryError extends Error {
   constructor(message, code) {
     super(message);
@@ -39,6 +41,24 @@ const NON_DEF_SECTIONS = new Set([
   'hyponymes', 'hyperonymes', 'holonymes', 'méronymes',
 ]);
 
+function validateApiResponse(response, word) {
+  if (response.data?.error) {
+    if (response.data.error.code === 'missingtitle') {
+      throw new DictionaryError(`Word "${word}" not found`, 'NOT_FOUND');
+    }
+    throw new DictionaryError(
+      `Upstream dictionary error: ${response.data.error.info || response.data.error.code}`,
+      'UPSTREAM_ERROR'
+    );
+  }
+  if (response.status === 404) {
+    throw new DictionaryError(`Word "${word}" not found`, 'NOT_FOUND');
+  }
+  if (response.status >= 400) {
+    throw new DictionaryError(`Upstream dictionary error (HTTP ${response.status})`, 'UPSTREAM_ERROR');
+  }
+}
+
 async function fetchDefinition(word) {
   if (!word || typeof word !== 'string') {
     throw new DictionaryError('Invalid word', 'INVALID_INPUT');
@@ -50,43 +70,17 @@ async function fetchDefinition(word) {
   try {
     response = await axios.get(url, {
       params: { action: 'parse', page: word, prop: 'wikitext', format: 'json', utf8: '1' },
-      timeout: 8000,
+      timeout: WIKTIONARY_TIMEOUT_MS,
       headers: { 'User-Agent': 'DictionaryApp/1.0' },
       validateStatus: (s) => s < 500,
     });
   } catch (err) {
-    throw new DictionaryError(
-      `Upstream dictionary unreachable: ${err.message}`,
-      'UPSTREAM_ERROR'
-    );
+    throw new DictionaryError(`Upstream dictionary unreachable: ${err.message}`, 'UPSTREAM_ERROR');
   }
 
-  if (response.data && response.data.error) {
-    if (response.data.error.code === 'missingtitle') {
-      throw new DictionaryError(`Word "${word}" not found`, 'NOT_FOUND');
-    }
-    throw new DictionaryError(
-      `Upstream dictionary error: ${response.data.error.info || response.data.error.code}`,
-      'UPSTREAM_ERROR'
-    );
-  }
+  validateApiResponse(response, word);
 
-  if (response.status === 404) {
-    throw new DictionaryError(`Word "${word}" not found`, 'NOT_FOUND');
-  }
-  if (response.status >= 400) {
-    throw new DictionaryError(
-      `Upstream dictionary error (HTTP ${response.status})`,
-      'UPSTREAM_ERROR'
-    );
-  }
-
-  const wikitext =
-    response.data &&
-    response.data.parse &&
-    response.data.parse.wikitext &&
-    response.data.parse.wikitext['*'];
-
+  const wikitext = response.data?.parse?.wikitext?.['*'];
   if (!wikitext) {
     throw new DictionaryError(`No content for "${word}"`, 'UPSTREAM_ERROR');
   }
@@ -101,7 +95,7 @@ async function fetchDefinition(word) {
 function parseWiktionaryWikitext(wikitext) {
   if (!wikitext || typeof wikitext !== 'string') return [];
 
-  // Collapse multi-line template parameters so each template fits on one line
+  // Wiktionary sometimes splits template parameters across lines; collapse them before line-by-line processing
   const normalized = wikitext.replace(/\n[ \t]*\|/g, ' |');
   const lines = normalized.split('\n');
 
@@ -169,8 +163,6 @@ function extractExampleText(line) {
   return cleanWikitext(content);
 }
 
-// Returns an array of raw parameter strings from inside a {{template|...}} call.
-// Input starts right after the template name (e.g. "|lang=fr|TEXT|source=...}}").
 function parseTemplateParams(s) {
   const params = [];
   let i = 0;
@@ -242,23 +234,9 @@ function capitalize(s) {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-function stripHtml(s) {
-  if (typeof s !== 'string') return '';
-  return s
-    .replace(/<[^>]*>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
 module.exports = {
   fetchDefinition,
   parseWiktionaryWikitext,
   cleanWikitext,
-  stripHtml,
   DictionaryError,
 };

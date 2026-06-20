@@ -2,76 +2,77 @@ const Word = require('../models/Word');
 const UserWord = require('../models/UserWord');
 const dictionaryService = require('./dictionaryService');
 
-/**
- * Searches for a word with:
- * 1. Cache lookup (Word collection)
- * 2. Third-party API fallback if missing
- * 3. Insert into cache if fetched
- * 4. Upsert into UserWord (add or update lastSearchedAt + searchCount)
- *
- * @returns {{ word, definitions, fromCache, alreadyInList }}
- */
-async function searchAndTrack(rawWord, userId) {
-  const normalized = Word.normalize(rawWord);
-  if (!normalized) {
-    const e = new Error('Word is required');
-    e.status = 400;
-    throw e;
+const DEFAULT_PAGE_LIMIT = 20;
+const MAX_PAGE_LIMIT = 100;
+
+function httpError(message, status) {
+  const err = new Error(message);
+  err.status = status;
+  return err;
+}
+
+function formatUserWord(uw) {
+  return {
+    id: uw._id,
+    word: uw.wordId.word,
+    definitions: uw.wordId.definitions,
+    firstSearchedAt: uw.firstSearchedAt,
+    lastSearchedAt: uw.lastSearchedAt,
+    searchCount: uw.searchCount,
+    notes: uw.notes,
+    tags: uw.tags,
+    favorite: uw.favorite,
+  };
+}
+
+async function fetchAndCacheWord(normalized) {
+  let definitions;
+  try {
+    definitions = await dictionaryService.fetchDefinition(normalized);
+  } catch (err) {
+    if (err.code === 'NOT_FOUND') {
+      throw httpError(`Word "${normalized}" not found in dictionary`, 404);
+    }
+    throw httpError('Dictionary service unavailable', 502);
   }
 
-  let word = await Word.findOne({ word: normalized });
-  let fromCache = true;
-
-  if (!word) {
-    fromCache = false;
-    let definitions;
-    try {
-      definitions = await dictionaryService.fetchDefinition(normalized);
-    } catch (err) {
-      if (err.code === 'NOT_FOUND') {
-        const e = new Error(`Word "${normalized}" not found in dictionary`);
-        e.status = 404;
-        throw e;
-      }
-      const e = new Error('Dictionary service unavailable');
-      e.status = 502;
-      throw e;
-    }
-
-    try {
-      word = await Word.create({
-        word: normalized,
-        definitions,
-        source: 'wiktionary',
-        fetchedAt: new Date(),
-      });
-    } catch (err) {
-      // Race condition: another request inserted the same word in parallel
-      if (err.code === 11000) {
-        word = await Word.findOne({ word: normalized });
-      } else {
-        throw err;
-      }
-    }
+  try {
+    return await Word.create({ word: normalized, definitions, source: 'wiktionary', fetchedAt: new Date() });
+  } catch (err) {
+    // Race condition: another request inserted the same word concurrently
+    if (err.code === 11000) return Word.findOne({ word: normalized });
+    throw err;
   }
+}
 
-  // Upsert user-word relation
-  const existing = await UserWord.findOne({ userId, wordId: word._id });
-  const alreadyInList = !!existing;
+async function resolveWord(normalized) {
+  const cached = await Word.findOne({ word: normalized });
+  if (cached) return { word: cached, fromCache: true };
 
-  await UserWord.findOneAndUpdate(
-    { userId, wordId: word._id },
+  const word = await fetchAndCacheWord(normalized);
+  return { word, fromCache: false };
+}
+
+async function trackSearch(userId, wordId) {
+  // findOneAndUpdate with new:false (default) returns null on upsert, pre-update doc on existing match
+  const previous = await UserWord.findOneAndUpdate(
+    { userId, wordId },
     {
       $set: { lastSearchedAt: new Date() },
       $inc: { searchCount: 1 },
-      $setOnInsert: {
-        userId,
-        wordId: word._id,
-        firstSearchedAt: new Date(),
-      },
+      $setOnInsert: { userId, wordId, firstSearchedAt: new Date() },
     },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
+    { upsert: true, setDefaultsOnInsert: true }
   );
+  return previous !== null;
+}
+
+async function searchAndTrack(rawWord, userId) {
+  const normalized = Word.normalize(rawWord);
+  if (!normalized) throw httpError('Word is required', 400);
+
+  const { word, fromCache } = await resolveWord(normalized);
+  const alreadyInList = await trackSearch(userId, word._id);
 
   return {
     word: word.word,
@@ -83,12 +84,9 @@ async function searchAndTrack(rawWord, userId) {
   };
 }
 
-/**
- * Paginated list of the user's words (join UserWord ↔ Word).
- */
 async function listUserWords(userId, { page = 1, limit = 20, search = '' } = {}) {
   const safePage = Math.max(1, parseInt(page, 10) || 1);
-  const safeLimit = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
+  const safeLimit = Math.min(MAX_PAGE_LIMIT, Math.max(1, parseInt(limit, 10) || DEFAULT_PAGE_LIMIT));
   const skip = (safePage - 1) * safeLimit;
 
   const userWords = await UserWord.find({ userId })
@@ -99,47 +97,20 @@ async function listUserWords(userId, { page = 1, limit = 20, search = '' } = {})
     })
     .lean();
 
-  // Filter out entries whose populated word didn't match the search filter
   const filtered = userWords.filter((uw) => uw.wordId);
   const total = filtered.length;
   const paginated = filtered.slice(skip, skip + safeLimit);
 
-  const items = paginated.map((uw) => ({
-    id: uw._id,
-    word: uw.wordId.word,
-    definitions: uw.wordId.definitions,
-    firstSearchedAt: uw.firstSearchedAt,
-    lastSearchedAt: uw.lastSearchedAt,
-    searchCount: uw.searchCount,
-    notes: uw.notes,
-    tags: uw.tags,
-    favorite: uw.favorite,
-  }));
-
   return {
-    items,
+    items: paginated.map(formatUserWord),
     pagination: { page: safePage, limit: safeLimit, total, pages: Math.ceil(total / safeLimit) },
   };
 }
 
 async function getUserWord(userId, userWordId) {
   const uw = await UserWord.findOne({ _id: userWordId, userId }).populate('wordId').lean();
-  if (!uw) {
-    const e = new Error('Word not found in your list');
-    e.status = 404;
-    throw e;
-  }
-  return {
-    id: uw._id,
-    word: uw.wordId.word,
-    definitions: uw.wordId.definitions,
-    firstSearchedAt: uw.firstSearchedAt,
-    lastSearchedAt: uw.lastSearchedAt,
-    searchCount: uw.searchCount,
-    notes: uw.notes,
-    tags: uw.tags,
-    favorite: uw.favorite,
-  };
+  if (!uw) throw httpError('Word not found in your list', 404);
+  return formatUserWord(uw);
 }
 
 async function updateUserWord(userId, userWordId, payload) {
@@ -152,33 +123,17 @@ async function updateUserWord(userId, userWordId, payload) {
     { _id: userWordId, userId },
     { $set: allowed },
     { new: true }
-  ).populate('wordId');
+  )
+    .populate('wordId')
+    .lean();
 
-  if (!uw) {
-    const e = new Error('Word not found in your list');
-    e.status = 404;
-    throw e;
-  }
-  return {
-    id: uw._id,
-    word: uw.wordId.word,
-    definitions: uw.wordId.definitions,
-    notes: uw.notes,
-    tags: uw.tags,
-    favorite: uw.favorite,
-    firstSearchedAt: uw.firstSearchedAt,
-    lastSearchedAt: uw.lastSearchedAt,
-    searchCount: uw.searchCount,
-  };
+  if (!uw) throw httpError('Word not found in your list', 404);
+  return formatUserWord(uw);
 }
 
 async function deleteUserWord(userId, userWordId) {
   const uw = await UserWord.findOneAndDelete({ _id: userWordId, userId });
-  if (!uw) {
-    const e = new Error('Word not found in your list');
-    e.status = 404;
-    throw e;
-  }
+  if (!uw) throw httpError('Word not found in your list', 404);
   return { id: uw._id };
 }
 

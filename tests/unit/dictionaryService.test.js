@@ -12,26 +12,6 @@ const {
 } = require('../fixtures/wiktionary');
 
 describe('dictionaryService', () => {
-  describe('stripHtml', () => {
-    it('removes HTML tags', () => {
-      expect(dictionaryService.stripHtml('<i>hello</i> <b>world</b>')).toBe('hello world');
-    });
-
-    it('decodes common HTML entities', () => {
-      expect(dictionaryService.stripHtml('a &amp; b &lt;c&gt; &quot;d&quot;')).toBe('a & b <c> "d"');
-    });
-
-    it('collapses whitespace', () => {
-      expect(dictionaryService.stripHtml('  too   many    spaces  ')).toBe('too many spaces');
-    });
-
-    it('returns empty string for non-string input', () => {
-      expect(dictionaryService.stripHtml(null)).toBe('');
-      expect(dictionaryService.stripHtml(undefined)).toBe('');
-      expect(dictionaryService.stripHtml(42)).toBe('');
-    });
-  });
-
   describe('cleanWikitext', () => {
     it('strips bold and italic markers', () => {
       expect(dictionaryService.cleanWikitext("''italic'' and '''bold'''")).toBe('italic and bold');

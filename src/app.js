@@ -7,6 +7,11 @@ const swaggerUi = require('swagger-ui-express');
 
 const config = require('./config');
 const swaggerSpec = require('./config/swagger');
+
+const BODY_SIZE_LIMIT = '100kb';
+const AUTH_RATE_WINDOW_MS = 15 * 60 * 1000;
+const AUTH_RATE_LIMIT = 20;
+const AUTH_RATE_LIMIT_TEST = 1000;
 const authRoutes = require('./routes/authRoutes');
 const wordRoutes = require('./routes/wordRoutes');
 const errorHandler = require('./middlewares/errorHandler');
@@ -16,7 +21,7 @@ function createApp() {
 
   app.use(helmet());
   app.use(cors({ origin: config.cors.origin }));
-  app.use(express.json({ limit: '100kb' }));
+  app.use(express.json({ limit: BODY_SIZE_LIMIT }));
 
   if (config.nodeEnv !== 'test') {
     app.use(morgan('dev'));
@@ -28,10 +33,10 @@ function createApp() {
     app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
   }
 
-  // Rate limit on auth endpoints (login/register) to mitigate brute force
+  // Mitigate brute force on auth endpoints
   const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: config.nodeEnv === 'test' ? 1000 : 20,
+    windowMs: AUTH_RATE_WINDOW_MS,
+    max: config.nodeEnv === 'test' ? AUTH_RATE_LIMIT_TEST : AUTH_RATE_LIMIT,
     standardHeaders: true,
     legacyHeaders: false,
   });
