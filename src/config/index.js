@@ -12,7 +12,7 @@ const config = {
     saltRounds: parseInt(process.env.BCRYPT_SALT_ROUNDS, 10) || 12,
   },
   wiktionary: {
-    baseUrl: process.env.WIKTIONARY_BASE_URL || 'https://en.wiktionary.org/api/rest_v1/page/definition',
+    baseUrl: process.env.WIKTIONARY_BASE_URL || 'https://fr.wiktionary.org',
   },
   cors: {
     origin: process.env.CORS_ORIGIN || '*',

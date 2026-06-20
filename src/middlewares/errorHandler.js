@@ -5,7 +5,7 @@ module.exports = function errorHandler(err, req, res, _next) {
   if (err.name === 'ValidationError') {
     return res.status(400).json({ error: 'Validation failed', details: err.errors });
   }
-  if (err.name === 'CastError') {
+  if (err.name === 'CastError' || err.name === 'BSONError') {
     return res.status(400).json({ error: 'Invalid ID format' });
   }
   if (err.code === 11000) {
