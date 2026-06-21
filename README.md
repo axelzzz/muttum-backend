@@ -83,6 +83,45 @@ This regenerates `src/app/core/api/` and keeps the static types in sync with the
 
 > Keep `src/config/swagger.js` honest: if a field is serialized as `id` in the JSON response, declare it as `id` in the schema — not `_id`. Silent mismatches between the spec and the actual payload are the main source of frontend type drift.
 
+## Docker
+
+The image runs the Express server on port 3000. MongoDB runs as a separate container; the connection URI is injected at runtime via `MONGODB_URI`.
+
+**Build and run standalone** (requires a running MongoDB):
+
+```bash
+docker build -t muttum-backend .
+docker run -p 3000:3000 \
+  -e MONGODB_URI=mongodb://host.docker.internal:27017/muttum \
+  -e JWT_SECRET=your-secret \
+  muttum-backend
+```
+
+**Run the full stack** from the `projets/` parent directory:
+
+```bash
+cp ../.env.example ../.env
+# edit ../.env — JWT_SECRET is required
+docker compose up --build
+```
+
+**Environment variables (production):**
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `JWT_SECRET` | yes | — | Must be changed; startup fails if left as the dev default |
+| `MONGODB_URI` | yes | `mongodb://localhost:27017/muttum` | Atlas URI for cloud deployments |
+| `PORT` | no | `3000` | Listening port |
+| `JWT_EXPIRES_IN` | no | `7d` | Token lifetime |
+| `BCRYPT_SALT_ROUNDS` | no | `12` | Hashing cost factor |
+| `CORS_ORIGIN` | no | `*` | Restrict to the frontend origin in production |
+| `NODE_ENV` | no | `development` | Set to `production` to enable strict checks |
+
+Key files:
+- `Dockerfile` — single-stage Node 22 Alpine image, production deps only (`--omit=dev`)
+- `.dockerignore` — excludes `node_modules`, `tests/`
+- `.env.example` — template for local development
+
 ## Tests
 
 ```bash
