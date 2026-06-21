@@ -31,7 +31,7 @@ router.use(auth);
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/UserWord'
+ *               $ref: '#/components/schemas/SearchResult'
  *       404:
  *         description: Word not found in Wiktionary
  *         content:
@@ -87,16 +87,21 @@ router.get(
  *             schema:
  *               type: object
  *               properties:
- *                 data:
+ *                 items:
  *                   type: array
  *                   items:
  *                     $ref: '#/components/schemas/UserWord'
- *                 total:
- *                   type: integer
- *                 page:
- *                   type: integer
- *                 limit:
- *                   type: integer
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     page:
+ *                       type: integer
+ *                     limit:
+ *                       type: integer
+ *                     total:
+ *                       type: integer
+ *                     pages:
+ *                       type: integer
  */
 router.get(
   '/',
@@ -222,9 +227,8 @@ router.patch(
  *             schema:
  *               type: object
  *               properties:
- *                 message:
+ *                 id:
  *                   type: string
- *                   example: Deleted
  *       404:
  *         description: Not found
  *         content:

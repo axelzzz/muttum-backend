@@ -54,7 +54,7 @@ async function resolveWord(normalized) {
 }
 
 async function trackSearch(userId, wordId) {
-  // findOneAndUpdate with new:false (default) returns null on upsert, pre-update doc on existing match
+  // new:false (default) returns null on upsert, pre-update doc on existing match
   const previous = await UserWord.findOneAndUpdate(
     { userId, wordId },
     {
@@ -74,7 +74,10 @@ async function searchAndTrack(rawWord, userId) {
   const { word, fromCache } = await resolveWord(normalized);
   const alreadyInList = await trackSearch(userId, word._id);
 
+  const userWord = await UserWord.findOne({ userId, wordId: word._id }, '_id').lean();
+
   return {
+    id: userWord?._id,
     word: word.word,
     wordId: word._id,
     definitions: word.toObject().definitions,

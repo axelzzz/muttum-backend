@@ -33,42 +33,40 @@ const spec = swaggerJsdoc({
             token: { type: 'string', example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' },
           },
         },
-        WordDefinition: {
+        Definition: {
           type: 'object',
           properties: {
             partOfSpeech: { type: 'string', example: 'nom' },
-            definitions: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  definition: { type: 'string' },
-                  examples: { type: 'array', items: { type: 'string' } },
-                },
-              },
-            },
-          },
-        },
-        Word: {
-          type: 'object',
-          properties: {
-            id: { type: 'string' },
-            word: { type: 'string', example: 'bonjour' },
-            definitions: { type: 'array', items: { $ref: '#/components/schemas/WordDefinition' } },
-            fetchedAt: { type: 'string', format: 'date-time' },
+            definition: { type: 'string', example: 'Meuble à quatre pieds.' },
+            examples: { type: 'array', items: { type: 'string' } },
           },
         },
         UserWord: {
           type: 'object',
+          description: 'Flat projection returned by list / getOne / update endpoints',
           properties: {
             id: { type: 'string' },
-            wordId: { $ref: '#/components/schemas/Word' },
-            notes: { type: 'string', example: 'Common greeting' },
-            tags: { type: 'array', items: { type: 'string' }, example: ['greetings'] },
-            favorite: { type: 'boolean', example: false },
-            searchCount: { type: 'integer', example: 3 },
+            word: { type: 'string', example: 'bonjour' },
+            definitions: { type: 'array', items: { $ref: '#/components/schemas/Definition' } },
             firstSearchedAt: { type: 'string', format: 'date-time' },
             lastSearchedAt: { type: 'string', format: 'date-time' },
+            searchCount: { type: 'integer', example: 3 },
+            notes: { type: 'string', example: 'Salutation courante' },
+            tags: { type: 'array', items: { type: 'string' }, example: ['greetings'] },
+            favorite: { type: 'boolean', example: false },
+          },
+        },
+        SearchResult: {
+          type: 'object',
+          description: 'Response from the search endpoint — includes word metadata and user-list context',
+          properties: {
+            id: { type: 'string', description: 'UserWord document id, usable for the /words/:id routes' },
+            word: { type: 'string', example: 'chaise' },
+            wordId: { type: 'string', description: 'Word document id' },
+            definitions: { type: 'array', items: { $ref: '#/components/schemas/Definition' } },
+            source: { type: 'string', enum: ['wiktionary', 'larousse', 'lerobert', 'manual'] },
+            fromCache: { type: 'boolean' },
+            alreadyInList: { type: 'boolean' },
           },
         },
         Error: {
