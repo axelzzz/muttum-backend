@@ -31,6 +31,7 @@ function createApp() {
 
   if (config.nodeEnv !== 'production') {
     app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+    app.get('/api-docs.json', (req, res) => res.json(swaggerSpec));
   }
 
   // Mitigate brute force on auth endpoints

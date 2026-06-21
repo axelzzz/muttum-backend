@@ -66,6 +66,23 @@ mongod --dbpath /tmp/mongodb-data --shutdown
 - `PATCH /api/words/:id` → updates notes / tags / favorite
 - `DELETE /api/words/:id` → removes from the personal list
 
+## API documentation & client generation
+
+The OpenAPI 3.0 spec is served in development mode:
+
+- **Swagger UI**: `http://localhost:3000/api-docs`
+- **Raw JSON spec**: `http://localhost:3000/api-docs.json`
+
+The JSON endpoint is consumed by [orval](https://orval.dev/) in the frontend project to auto-generate TypeScript models and Angular services. Whenever the contract changes, update the schemas in `src/config/swagger.js` to reflect the actual response shape, then run the following from the frontend root:
+
+```bash
+npm run generate:api
+```
+
+This regenerates `src/app/core/api/` and keeps the static types in sync with the runtime responses.
+
+> Keep `src/config/swagger.js` honest: if a field is serialized as `id` in the JSON response, declare it as `id` in the schema — not `_id`. Silent mismatches between the spec and the actual payload are the main source of frontend type drift.
+
 ## Tests
 
 ```bash

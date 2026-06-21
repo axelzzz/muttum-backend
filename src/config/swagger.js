@@ -20,7 +20,7 @@ const spec = swaggerJsdoc({
         User: {
           type: 'object',
           properties: {
-            _id: { type: 'string', example: '64a1b2c3d4e5f6a7b8c9d0e1' },
+            id: { type: 'string', example: '64a1b2c3d4e5f6a7b8c9d0e1' },
             email: { type: 'string', format: 'email', example: 'user@example.com' },
             username: { type: 'string', example: 'alice' },
             createdAt: { type: 'string', format: 'date-time' },
@@ -52,7 +52,7 @@ const spec = swaggerJsdoc({
         Word: {
           type: 'object',
           properties: {
-            _id: { type: 'string' },
+            id: { type: 'string' },
             word: { type: 'string', example: 'bonjour' },
             definitions: { type: 'array', items: { $ref: '#/components/schemas/WordDefinition' } },
             fetchedAt: { type: 'string', format: 'date-time' },
@@ -61,7 +61,7 @@ const spec = swaggerJsdoc({
         UserWord: {
           type: 'object',
           properties: {
-            _id: { type: 'string' },
+            id: { type: 'string' },
             wordId: { $ref: '#/components/schemas/Word' },
             notes: { type: 'string', example: 'Common greeting' },
             tags: { type: 'array', items: { type: 'string' }, example: ['greetings'] },
