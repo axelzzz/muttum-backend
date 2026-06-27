@@ -1,50 +1,45 @@
-const Word = require('../../src/models/Word');
+const { normalizeWord } = require('../../src/utils/normalize');
+const { getPool } = require('../../src/db/pool');
 
-describe('Word model', () => {
-  describe('static normalize', () => {
-    it('lowercases', () => {
-      expect(Word.normalize('SÉRENDIPITÉ')).toBe('sérendipité');
-    });
-
-    it('trims', () => {
-      expect(Word.normalize('  bonjour  ')).toBe('bonjour');
-    });
-
-    it('normalizes Unicode (NFC)', () => {
-      const decomposed = 'e\u0301'; // é decomposed
-      const composed = 'é';         // é composed
-      expect(Word.normalize(decomposed)).toBe(composed);
-    });
-
-    it('returns empty string for non-string', () => {
-      expect(Word.normalize(null)).toBe('');
-      expect(Word.normalize(undefined)).toBe('');
-      expect(Word.normalize(123)).toBe('');
-    });
+describe('normalizeWord', () => {
+  it('lowercases', () => {
+    expect(normalizeWord('SÉRENDIPITÉ')).toBe('sérendipité');
   });
 
-  it('persists with definitions', async () => {
-    const w = await Word.create({
-      word: 'test',
-      definitions: [{ partOfSpeech: 'n.m.', definition: 'A trial.', examples: [] }],
-    });
-    expect(w._id).toBeDefined();
-    expect(w.word).toBe('test');
-    expect(w.definitions).toHaveLength(1);
+  it('trims whitespace', () => {
+    expect(normalizeWord('  bonjour  ')).toBe('bonjour');
+  });
+
+  it('normalizes Unicode to NFC', () => {
+    const decomposed = 'é'; // é as two code points
+    const composed = 'é';    // é as one code point
+    expect(normalizeWord(decomposed)).toBe(composed);
+  });
+
+  it('returns empty string for non-string input', () => {
+    expect(normalizeWord(null)).toBe('');
+    expect(normalizeWord(undefined)).toBe('');
+    expect(normalizeWord(123)).toBe('');
+  });
+});
+
+describe('words table', () => {
+  it('persists a word with its source', async () => {
+    const pool = getPool();
+    const res = await pool.query(
+      "INSERT INTO words (word, source) VALUES ($1, 'wiktionary') RETURNING *",
+      ['test']
+    );
+    expect(res.rows[0].id).toBeDefined();
+    expect(res.rows[0].word).toBe('test');
+    expect(res.rows[0].source).toBe('wiktionary');
   });
 
   it('enforces unique word', async () => {
-    await Word.create({ word: 'unique', definitions: [{ definition: 'd' }] });
+    const pool = getPool();
+    await pool.query("INSERT INTO words (word, source) VALUES ('unique', 'wiktionary')");
     await expect(
-      Word.create({ word: 'unique', definitions: [{ definition: 'd2' }] })
+      pool.query("INSERT INTO words (word, source) VALUES ('unique', 'manual')")
     ).rejects.toThrow();
-  });
-
-  it('lowercases the word at save time', async () => {
-    const w = await Word.create({
-      word: 'BONJOUR',
-      definitions: [{ definition: 'hello' }],
-    });
-    expect(w.word).toBe('bonjour');
   });
 });

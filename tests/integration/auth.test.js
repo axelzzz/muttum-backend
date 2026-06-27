@@ -1,6 +1,7 @@
 const request = require('supertest');
 const createApp = require('../../src/app');
 const { createUser } = require('../fixtures/users');
+const { sign } = require('../../src/utils/jwt');
 
 const app = createApp();
 
@@ -14,7 +15,7 @@ describe('POST /api/auth/register', () => {
     expect(res.body.token).toBeDefined();
     expect(res.body.user.email).toBe('new@example.com');
     expect(res.body.user.username).toBe('New');
-    expect(res.body.user.passwordHash).toBeUndefined();
+    expect(res.body.user.password_hash).toBeUndefined();
   });
 
   it('rejects invalid email', async () => {
@@ -88,9 +89,8 @@ describe('GET /api/auth/me', () => {
   });
 
   it('returns user profile with valid token', async () => {
-    const { sign } = require('../../src/utils/jwt');
     const user = await createUser({ email: 'me@x.com', username: 'Me' });
-    const token = sign({ sub: user._id.toString(), email: user.email });
+    const token = sign({ sub: String(user.id), email: user.email });
 
     const res = await request(app)
       .get('/api/auth/me')

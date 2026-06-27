@@ -1,34 +1,54 @@
-// Mock the dictionary service BEFORE the app is loaded
 jest.mock('../../src/services/dictionaryService', () => {
   const actual = jest.requireActual('../../src/services/dictionaryService');
-  return {
-    ...actual,
-    fetchDefinition: jest.fn(),
-  };
+  return { ...actual, fetchDefinition: jest.fn() };
 });
 
 const request = require('supertest');
 const createApp = require('../../src/app');
 const dictionaryService = require('../../src/services/dictionaryService');
-const Word = require('../../src/models/Word');
-const UserWord = require('../../src/models/UserWord');
+const { getPool } = require('../../src/db/pool');
 const { createUserAndToken } = require('../fixtures/users');
+const { sign } = require('../../src/utils/jwt');
 
 const app = createApp();
 
 const sampleDefs = [
-  {
-    partOfSpeech: 'n.f.',
-    definition: 'Capacité de découvrir par hasard.',
-    examples: ['exemple'],
-  },
+  { partOfSpeech: 'n.f.', definition: 'Capacité de découvrir par hasard.', examples: ['exemple'] },
 ];
+
+async function countWords() {
+  const res = await getPool().query('SELECT COUNT(*) AS n FROM words');
+  return parseInt(res.rows[0].n, 10);
+}
+
+async function countUserWords(userId) {
+  if (userId) {
+    const res = await getPool().query('SELECT COUNT(*) AS n FROM user_words WHERE user_id = $1', [userId]);
+    return parseInt(res.rows[0].n, 10);
+  }
+  const res = await getPool().query('SELECT COUNT(*) AS n FROM user_words');
+  return parseInt(res.rows[0].n, 10);
+}
+
+async function findUserWord(userId) {
+  const res = await getPool().query('SELECT * FROM user_words WHERE user_id = $1', [userId]);
+  return res.rows[0] || null;
+}
 
 describe('GET /api/words/search', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('returns 401 without auth', async () => {
     const res = await request(app).get('/api/words/search?word=hello');
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 401 when JWT references a nonexistent user', async () => {
+    const token = sign({ sub: '99999', email: 'ghost@x.com' });
+    dictionaryService.fetchDefinition.mockResolvedValue(sampleDefs);
+    const res = await request(app)
+      .get('/api/words/search?word=hello')
+      .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(401);
   });
 
@@ -55,36 +75,30 @@ describe('GET /api/words/search', () => {
     expect(res.body.definitions).toEqual(sampleDefs);
     expect(dictionaryService.fetchDefinition).toHaveBeenCalledTimes(1);
 
-    expect(await Word.countDocuments({ word: 'sérendipité' })).toBe(1);
-    expect(await UserWord.countDocuments({ userId: user._id })).toBe(1);
+    expect(await countWords()).toBe(1);
+    expect(await countUserWords(user.id)).toBe(1);
   });
 
-  it('CORE SCENARIO — second user searching same word reads from cache (no API call), and gets it added to their list', async () => {
+  it('CORE SCENARIO — second user searching same word reads from cache (no API call)', async () => {
     dictionaryService.fetchDefinition.mockResolvedValue(sampleDefs);
     const { token: t1 } = await createUserAndToken({ email: 'a@x.com' });
     const { token: t2, user: u2 } = await createUserAndToken({ email: 'b@x.com' });
 
-    // First user triggers the cache
-    await request(app)
-      .get('/api/words/search?word=mutuel')
-      .set('Authorization', `Bearer ${t1}`);
+    await request(app).get('/api/words/search?word=mutuel').set('Authorization', `Bearer ${t1}`);
     expect(dictionaryService.fetchDefinition).toHaveBeenCalledTimes(1);
 
-    // Second user searches same word
     const res = await request(app)
       .get('/api/words/search?word=mutuel')
       .set('Authorization', `Bearer ${t2}`);
 
     expect(res.status).toBe(200);
     expect(res.body.fromCache).toBe(true);
-    expect(res.body.alreadyInList).toBe(false); // it's in user2's list for the first time
-    // API NOT called a second time
+    expect(res.body.alreadyInList).toBe(false);
     expect(dictionaryService.fetchDefinition).toHaveBeenCalledTimes(1);
 
-    // Word still unique in DB, both users have a UserWord entry
-    expect(await Word.countDocuments({ word: 'mutuel' })).toBe(1);
-    expect(await UserWord.countDocuments({ userId: u2._id })).toBe(1);
-    expect(await UserWord.countDocuments()).toBe(2);
+    expect(await countWords()).toBe(1);
+    expect(await countUserWords(u2.id)).toBe(1);
+    expect(await countUserWords()).toBe(2);
   });
 
   it('repeated search by same user does not duplicate UserWord, increments searchCount', async () => {
@@ -97,9 +111,9 @@ describe('GET /api/words/search', () => {
       .set('Authorization', `Bearer ${token}`);
 
     expect(r2.body.alreadyInList).toBe(true);
-    expect(await UserWord.countDocuments({ userId: user._id })).toBe(1);
-    const uw = await UserWord.findOne({ userId: user._id });
-    expect(uw.searchCount).toBe(2);
+    expect(await countUserWords(user.id)).toBe(1);
+    const uw = await findUserWord(user.id);
+    expect(uw.search_count).toBe(2);
   });
 
   it('returns 404 when word does not exist in upstream API', async () => {
@@ -113,8 +127,8 @@ describe('GET /api/words/search', () => {
       .set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(404);
-    expect(await Word.countDocuments()).toBe(0);
-    expect(await UserWord.countDocuments()).toBe(0);
+    expect(await countWords()).toBe(0);
+    expect(await countUserWords()).toBe(0);
   });
 
   it('returns 502 when upstream API is unreachable', async () => {
@@ -138,7 +152,7 @@ describe('GET /api/words/search', () => {
       .set('Authorization', `Bearer ${token}`);
 
     expect(r2.body.fromCache).toBe(true);
-    expect(await Word.countDocuments()).toBe(1);
+    expect(await countWords()).toBe(1);
     expect(dictionaryService.fetchDefinition).toHaveBeenCalledTimes(1);
   });
 });
@@ -169,9 +183,7 @@ describe('GET /api/words', () => {
     const { token } = await createUserAndToken();
 
     for (const w of ['un', 'deux', 'trois', 'quatre', 'cinq']) {
-      await request(app)
-        .get(`/api/words/search?word=${w}`)
-        .set('Authorization', `Bearer ${token}`);
+      await request(app).get(`/api/words/search?word=${w}`).set('Authorization', `Bearer ${token}`);
     }
 
     const res = await request(app)
@@ -197,9 +209,7 @@ describe('GET /api/words/:id', () => {
     const list = await request(app).get('/api/words').set('Authorization', `Bearer ${token}`);
     const id = list.body.items[0].id;
 
-    const res = await request(app)
-      .get(`/api/words/${id}`)
-      .set('Authorization', `Bearer ${token}`);
+    const res = await request(app).get(`/api/words/${id}`).set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.word).toBe('detail');
   });
@@ -213,16 +223,14 @@ describe('GET /api/words/:id', () => {
     const list = await request(app).get('/api/words').set('Authorization', `Bearer ${t1}`);
     const id = list.body.items[0].id;
 
-    const res = await request(app)
-      .get(`/api/words/${id}`)
-      .set('Authorization', `Bearer ${t2}`);
+    const res = await request(app).get(`/api/words/${id}`).set('Authorization', `Bearer ${t2}`);
     expect(res.status).toBe(404);
   });
 
   it('returns 400 with invalid id format', async () => {
     const { token } = await createUserAndToken();
     const res = await request(app)
-      .get('/api/words/not-a-mongo-id')
+      .get('/api/words/not-an-integer')
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(400);
   });
@@ -249,7 +257,7 @@ describe('PATCH /api/words/:id', () => {
 });
 
 describe('DELETE /api/words/:id', () => {
-  it('removes from user list but keeps Word in shared cache', async () => {
+  it('removes from user list but keeps word in shared cache', async () => {
     dictionaryService.fetchDefinition.mockResolvedValue(sampleDefs);
     const { token } = await createUserAndToken();
     await request(app).get('/api/words/search?word=remove').set('Authorization', `Bearer ${token}`);
@@ -261,8 +269,8 @@ describe('DELETE /api/words/:id', () => {
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
 
-    expect(await UserWord.countDocuments()).toBe(0);
-    expect(await Word.countDocuments({ word: 'remove' })).toBe(1);
+    expect(await countUserWords()).toBe(0);
+    expect(await countWords()).toBe(1);
   });
 
   it('returns 404 when trying to delete word of another user', async () => {
@@ -274,9 +282,7 @@ describe('DELETE /api/words/:id', () => {
     const list = await request(app).get('/api/words').set('Authorization', `Bearer ${t1}`);
     const id = list.body.items[0].id;
 
-    const res = await request(app)
-      .delete(`/api/words/${id}`)
-      .set('Authorization', `Bearer ${t2}`);
+    const res = await request(app).delete(`/api/words/${id}`).set('Authorization', `Bearer ${t2}`);
     expect(res.status).toBe(404);
   });
 });

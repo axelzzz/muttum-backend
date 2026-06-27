@@ -1,31 +1,65 @@
 jest.mock('../../src/services/dictionaryService', () => {
   const actual = jest.requireActual('../../src/services/dictionaryService');
-  return {
-    ...actual,
-    fetchDefinition: jest.fn(),
-  };
+  return { ...actual, fetchDefinition: jest.fn() };
 });
 
 const wordService = require('../../src/services/wordService');
 const dictionaryService = require('../../src/services/dictionaryService');
-const Word = require('../../src/models/Word');
-const UserWord = require('../../src/models/UserWord');
+const { getPool } = require('../../src/db/pool');
 const { createUser } = require('../fixtures/users');
 
 const mockDefinitions = [
   { partOfSpeech: 'n.f.', definition: 'Capacité de découvrir par hasard.', examples: [] },
 ];
 
+async function insertWord(word, source = 'wiktionary') {
+  const pool = getPool();
+  const res = await pool.query(
+    'INSERT INTO words (word, source) VALUES ($1, $2) RETURNING id',
+    [word, source]
+  );
+  return res.rows[0];
+}
+
+async function insertDefinitions(wordId, defs) {
+  const pool = getPool();
+  for (let i = 0; i < defs.length; i++) {
+    await pool.query(
+      'INSERT INTO definitions (word_id, part_of_speech, definition, examples, position) VALUES ($1, $2, $3, $4, $5)',
+      [wordId, defs[i].partOfSpeech || '', defs[i].definition, defs[i].examples || [], i]
+    );
+  }
+}
+
+async function insertUserWord(userId, wordId, overrides = {}) {
+  const pool = getPool();
+  const lastSearchedAt = overrides.lastSearchedAt || new Date();
+  const res = await pool.query(
+    `INSERT INTO user_words (user_id, word_id, last_searched_at, search_count)
+     VALUES ($1, $2, $3, $4) RETURNING *`,
+    [userId, wordId, lastSearchedAt, overrides.searchCount || 1]
+  );
+  return res.rows[0];
+}
+
+async function countRows(table, whereUserId) {
+  const pool = getPool();
+  if (whereUserId) {
+    const res = await pool.query(`SELECT COUNT(*) AS n FROM ${table} WHERE user_id = $1`, [whereUserId]);
+    return parseInt(res.rows[0].n, 10);
+  }
+  const res = await pool.query(`SELECT COUNT(*) AS n FROM ${table}`);
+  return parseInt(res.rows[0].n, 10);
+}
+
 describe('wordService.searchAndTrack', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
+  beforeEach(() => jest.clearAllMocks());
 
   it('fetches from API and caches when word is not in DB', async () => {
     dictionaryService.fetchDefinition.mockResolvedValue(mockDefinitions);
     const user = await createUser();
 
-    const result = await wordService.searchAndTrack('Sérendipité', user._id);
+    const result = await wordService.searchAndTrack('Sérendipité', String(user.id));
 
     expect(result.fromCache).toBe(false);
     expect(result.alreadyInList).toBe(false);
@@ -33,60 +67,62 @@ describe('wordService.searchAndTrack', () => {
     expect(result.definitions).toEqual(mockDefinitions);
     expect(dictionaryService.fetchDefinition).toHaveBeenCalledTimes(1);
 
-    const inDb = await Word.findOne({ word: 'sérendipité' });
-    expect(inDb).not.toBeNull();
-
-    const userWord = await UserWord.findOne({ userId: user._id });
-    expect(userWord).not.toBeNull();
-    expect(userWord.searchCount).toBe(1);
+    expect(await countRows('words')).toBe(1);
+    expect(await countRows('user_words', user.id)).toBe(1);
   });
 
   it('reads from cache when word is already in DB (does NOT call API)', async () => {
-    await Word.create({ word: 'cache', definitions: mockDefinitions });
+    const w = await insertWord('cache');
+    await insertDefinitions(w.id, mockDefinitions);
     const user = await createUser();
 
-    const result = await wordService.searchAndTrack('cache', user._id);
+    const result = await wordService.searchAndTrack('cache', String(user.id));
 
     expect(result.fromCache).toBe(true);
     expect(dictionaryService.fetchDefinition).not.toHaveBeenCalled();
   });
 
   it('adds word to user list automatically on first search', async () => {
-    await Word.create({ word: 'auto', definitions: mockDefinitions });
+    const w = await insertWord('auto');
+    await insertDefinitions(w.id, mockDefinitions);
     const user = await createUser();
 
-    expect(await UserWord.countDocuments({ userId: user._id })).toBe(0);
-    await wordService.searchAndTrack('auto', user._id);
-    expect(await UserWord.countDocuments({ userId: user._id })).toBe(1);
+    expect(await countRows('user_words', user.id)).toBe(0);
+    await wordService.searchAndTrack('auto', String(user.id));
+    expect(await countRows('user_words', user.id)).toBe(1);
   });
 
   it('increments searchCount and updates lastSearchedAt on repeated search', async () => {
-    await Word.create({ word: 'repeat', definitions: mockDefinitions });
+    const w = await insertWord('repeat');
+    await insertDefinitions(w.id, mockDefinitions);
     const user = await createUser();
 
-    const r1 = await wordService.searchAndTrack('repeat', user._id);
+    const r1 = await wordService.searchAndTrack('repeat', String(user.id));
     expect(r1.alreadyInList).toBe(false);
 
     await new Promise((r) => setTimeout(r, 10));
-    const r2 = await wordService.searchAndTrack('repeat', user._id);
+    const r2 = await wordService.searchAndTrack('repeat', String(user.id));
     expect(r2.alreadyInList).toBe(true);
 
-    const uw = await UserWord.findOne({ userId: user._id });
-    expect(uw.searchCount).toBe(2);
-    expect(uw.lastSearchedAt.getTime()).toBeGreaterThan(uw.firstSearchedAt.getTime());
+    const pool = getPool();
+    const uw = (await pool.query('SELECT * FROM user_words WHERE user_id = $1', [user.id])).rows[0];
+    expect(uw.search_count).toBe(2);
+    expect(new Date(uw.last_searched_at).getTime()).toBeGreaterThanOrEqual(
+      new Date(uw.first_searched_at).getTime()
+    );
   });
 
-  it('isolates words per user (two users searching same word get separate UserWord entries)', async () => {
+  it('isolates words per user (two users searching same word get separate user_word rows)', async () => {
     dictionaryService.fetchDefinition.mockResolvedValue(mockDefinitions);
     const u1 = await createUser({ email: 'u1@x.com' });
     const u2 = await createUser({ email: 'u2@x.com' });
 
-    await wordService.searchAndTrack('partage', u1._id);
-    await wordService.searchAndTrack('partage', u2._id);
+    await wordService.searchAndTrack('partage', String(u1.id));
+    await wordService.searchAndTrack('partage', String(u2.id));
 
-    expect(await Word.countDocuments({ word: 'partage' })).toBe(1);
-    expect(await UserWord.countDocuments({ userId: u1._id })).toBe(1);
-    expect(await UserWord.countDocuments({ userId: u2._id })).toBe(1);
+    expect(await countRows('words')).toBe(1);
+    expect(await countRows('user_words', u1.id)).toBe(1);
+    expect(await countRows('user_words', u2.id)).toBe(1);
     expect(dictionaryService.fetchDefinition).toHaveBeenCalledTimes(1);
   });
 
@@ -95,11 +131,9 @@ describe('wordService.searchAndTrack', () => {
       Object.assign(new Error('not found'), { code: 'NOT_FOUND' })
     );
     const user = await createUser();
-    await expect(wordService.searchAndTrack('xyzunknown', user._id)).rejects.toMatchObject({
-      status: 404,
-    });
-    expect(await Word.countDocuments()).toBe(0);
-    expect(await UserWord.countDocuments()).toBe(0);
+    await expect(wordService.searchAndTrack('xyzunknown', String(user.id))).rejects.toMatchObject({ status: 404 });
+    expect(await countRows('words')).toBe(0);
+    expect(await countRows('user_words')).toBe(0);
   });
 
   it('throws 502 when upstream API errors', async () => {
@@ -107,44 +141,38 @@ describe('wordService.searchAndTrack', () => {
       Object.assign(new Error('boom'), { code: 'UPSTREAM_ERROR' })
     );
     const user = await createUser();
-    await expect(wordService.searchAndTrack('any', user._id)).rejects.toMatchObject({
-      status: 502,
-    });
+    await expect(wordService.searchAndTrack('any', String(user.id))).rejects.toMatchObject({ status: 502 });
   });
 
   it('throws 400 when word is empty', async () => {
     const user = await createUser();
-    await expect(wordService.searchAndTrack('   ', user._id)).rejects.toMatchObject({
-      status: 400,
-    });
+    await expect(wordService.searchAndTrack('   ', String(user.id))).rejects.toMatchObject({ status: 400 });
   });
 
   it('normalizes word before storing (case + accents)', async () => {
     dictionaryService.fetchDefinition.mockResolvedValue(mockDefinitions);
     const user = await createUser();
 
-    await wordService.searchAndTrack('  CAFÉ  ', user._id);
-    const r = await wordService.searchAndTrack('café', user._id);
+    await wordService.searchAndTrack('  CAFÉ  ', String(user.id));
+    const r = await wordService.searchAndTrack('café', String(user.id));
 
     expect(r.fromCache).toBe(true);
-    expect(await Word.countDocuments()).toBe(1);
+    expect(await countRows('words')).toBe(1);
   });
 });
 
 describe('wordService.listUserWords', () => {
   it('returns paginated list sorted by lastSearchedAt desc', async () => {
     const user = await createUser();
-    const w1 = await Word.create({ word: 'alpha', definitions: [{ definition: 'a' }] });
-    const w2 = await Word.create({ word: 'beta', definitions: [{ definition: 'b' }] });
+    const w1 = await insertWord('alpha');
+    const w2 = await insertWord('beta');
+    await insertDefinitions(w1.id, [{ definition: 'a' }]);
+    await insertDefinitions(w2.id, [{ definition: 'b' }]);
 
-    await UserWord.create({
-      userId: user._id, wordId: w1._id, lastSearchedAt: new Date('2024-01-01'),
-    });
-    await UserWord.create({
-      userId: user._id, wordId: w2._id, lastSearchedAt: new Date('2024-02-01'),
-    });
+    await insertUserWord(user.id, w1.id, { lastSearchedAt: new Date('2024-01-01') });
+    await insertUserWord(user.id, w2.id, { lastSearchedAt: new Date('2024-02-01') });
 
-    const r = await wordService.listUserWords(user._id);
+    const r = await wordService.listUserWords(String(user.id));
     expect(r.items).toHaveLength(2);
     expect(r.items[0].word).toBe('beta');
     expect(r.items[1].word).toBe('alpha');
@@ -153,12 +181,14 @@ describe('wordService.listUserWords', () => {
 
   it('filters by search term', async () => {
     const user = await createUser();
-    const w1 = await Word.create({ word: 'pomme', definitions: [{ definition: 'a' }] });
-    const w2 = await Word.create({ word: 'poire', definitions: [{ definition: 'b' }] });
-    await UserWord.create({ userId: user._id, wordId: w1._id });
-    await UserWord.create({ userId: user._id, wordId: w2._id });
+    const w1 = await insertWord('pomme');
+    const w2 = await insertWord('poire');
+    await insertDefinitions(w1.id, [{ definition: 'a' }]);
+    await insertDefinitions(w2.id, [{ definition: 'b' }]);
+    await insertUserWord(user.id, w1.id);
+    await insertUserWord(user.id, w2.id);
 
-    const r = await wordService.listUserWords(user._id, { search: 'pom' });
+    const r = await wordService.listUserWords(String(user.id), { search: 'pom' });
     expect(r.items).toHaveLength(1);
     expect(r.items[0].word).toBe('pomme');
   });
@@ -166,47 +196,52 @@ describe('wordService.listUserWords', () => {
   it('does not return words from another user', async () => {
     const u1 = await createUser({ email: 'u1@x.com' });
     const u2 = await createUser({ email: 'u2@x.com' });
-    const w = await Word.create({ word: 'priv', definitions: [{ definition: 'x' }] });
-    await UserWord.create({ userId: u2._id, wordId: w._id });
+    const w = await insertWord('priv');
+    await insertDefinitions(w.id, [{ definition: 'x' }]);
+    await insertUserWord(u2.id, w.id);
 
-    const r = await wordService.listUserWords(u1._id);
+    const r = await wordService.listUserWords(String(u1.id));
     expect(r.items).toHaveLength(0);
   });
 });
 
 describe('wordService.deleteUserWord', () => {
-  it('removes UserWord but keeps Word in cache', async () => {
+  it('removes user_word but keeps word in cache', async () => {
+    const pool = getPool();
     const user = await createUser();
-    const w = await Word.create({ word: 'keep', definitions: [{ definition: 'x' }] });
-    const uw = await UserWord.create({ userId: user._id, wordId: w._id });
+    const w = await insertWord('keep');
+    const uw = await insertUserWord(user.id, w.id);
 
-    await wordService.deleteUserWord(user._id, uw._id);
+    await wordService.deleteUserWord(String(user.id), String(uw.id));
 
-    expect(await UserWord.findById(uw._id)).toBeNull();
-    expect(await Word.findById(w._id)).not.toBeNull();
+    const uwRes = await pool.query('SELECT id FROM user_words WHERE id = $1', [uw.id]);
+    expect(uwRes.rows).toHaveLength(0);
+    const wRes = await pool.query('SELECT id FROM words WHERE id = $1', [w.id]);
+    expect(wRes.rows).toHaveLength(1);
   });
 
-  it('throws 404 when UserWord does not belong to caller', async () => {
+  it('throws 404 when user_word does not belong to caller', async () => {
     const u1 = await createUser({ email: 'u1@x.com' });
     const u2 = await createUser({ email: 'u2@x.com' });
-    const w = await Word.create({ word: 'x', definitions: [{ definition: 'x' }] });
-    const uw = await UserWord.create({ userId: u1._id, wordId: w._id });
+    const w = await insertWord('x');
+    const uw = await insertUserWord(u1.id, w.id);
 
-    await expect(wordService.deleteUserWord(u2._id, uw._id)).rejects.toMatchObject({ status: 404 });
+    await expect(wordService.deleteUserWord(String(u2.id), String(uw.id))).rejects.toMatchObject({ status: 404 });
   });
 });
 
 describe('wordService.updateUserWord', () => {
   it('updates only allowed fields', async () => {
     const user = await createUser();
-    const w = await Word.create({ word: 'edit', definitions: [{ definition: 'x' }] });
-    const uw = await UserWord.create({ userId: user._id, wordId: w._id });
+    const w = await insertWord('edit');
+    await insertDefinitions(w.id, [{ definition: 'x' }]);
+    const uw = await insertUserWord(user.id, w.id);
 
-    const r = await wordService.updateUserWord(user._id, uw._id, {
+    const r = await wordService.updateUserWord(String(user.id), String(uw.id), {
       notes: 'my notes',
       tags: ['important'],
       favorite: true,
-      searchCount: 999, // disallowed
+      search_count: 999, // disallowed
     });
 
     expect(r.notes).toBe('my notes');

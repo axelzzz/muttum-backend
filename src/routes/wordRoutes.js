@@ -82,26 +82,6 @@ router.get(
  *     responses:
  *       200:
  *         description: Paginated list of user words
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 items:
- *                   type: array
- *                   items:
- *                     $ref: '#/components/schemas/UserWord'
- *                 pagination:
- *                   type: object
- *                   properties:
- *                     page:
- *                       type: integer
- *                     limit:
- *                       type: integer
- *                     total:
- *                       type: integer
- *                     pages:
- *                       type: integer
  */
 router.get(
   '/',
@@ -127,25 +107,16 @@ router.get(
  *         name: id
  *         required: true
  *         schema:
- *           type: string
- *         description: UserWord document ID
+ *           type: integer
  *     responses:
  *       200:
  *         description: UserWord document
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/UserWord'
  *       404:
  *         description: Not found
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
  */
 router.get(
   '/:id',
-  [param('id').isMongoId().withMessage('Invalid id')],
+  [param('id').isInt({ min: 1 }).withMessage('Invalid id')],
   validate,
   ctrl.getOne
 );
@@ -163,7 +134,7 @@ router.get(
  *         name: id
  *         required: true
  *         schema:
- *           type: string
+ *           type: integer
  *     requestBody:
  *       content:
  *         application/json:
@@ -182,21 +153,13 @@ router.get(
  *     responses:
  *       200:
  *         description: Updated UserWord
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/UserWord'
  *       404:
  *         description: Not found
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
  */
 router.patch(
   '/:id',
   [
-    param('id').isMongoId(),
+    param('id').isInt({ min: 1 }),
     body('notes').optional().isString().isLength({ max: 2000 }),
     body('tags').optional().isArray(),
     body('favorite').optional().isBoolean(),
@@ -218,27 +181,16 @@ router.patch(
  *         name: id
  *         required: true
  *         schema:
- *           type: string
+ *           type: integer
  *     responses:
  *       200:
  *         description: Deletion confirmed
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 id:
- *                   type: string
  *       404:
  *         description: Not found
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
  */
 router.delete(
   '/:id',
-  [param('id').isMongoId()],
+  [param('id').isInt({ min: 1 })],
   validate,
   ctrl.remove
 );

@@ -1,4 +1,6 @@
-const User = require('../../src/models/User');
+const bcrypt = require('bcryptjs');
+const { getPool } = require('../../src/db/pool');
+const config = require('../../src/config');
 const { sign } = require('../../src/utils/jwt');
 
 async function createUser(overrides = {}) {
@@ -8,14 +10,17 @@ async function createUser(overrides = {}) {
     password: 'password123',
     ...overrides,
   };
-  const user = new User({ email: data.email, username: data.username });
-  user.password = data.password;
-  await user.save();
-  return user;
+  const pool = getPool();
+  const passwordHash = await bcrypt.hash(data.password, config.bcrypt.saltRounds);
+  const res = await pool.query(
+    'INSERT INTO users (email, username, password_hash) VALUES ($1, $2, $3) RETURNING *',
+    [data.email.toLowerCase(), data.username, passwordHash]
+  );
+  return res.rows[0];
 }
 
 function buildToken(user) {
-  return sign({ sub: user._id.toString(), email: user.email });
+  return sign({ sub: String(user.id), email: user.email });
 }
 
 async function createUserAndToken(overrides = {}) {

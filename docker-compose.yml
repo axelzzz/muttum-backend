@@ -1,0 +1,36 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: dictionary-app
+      POSTGRES_USER: muttum
+      POSTGRES_PASSWORD: muttum
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./src/db/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U muttum -d dictionary-app"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://muttum:muttum@postgres:5432/dictionary-app
+      JWT_SECRET: ${JWT_SECRET:-change-me-with-a-strong-random-secret}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      BCRYPT_SALT_ROUNDS: ${BCRYPT_SALT_ROUNDS:-12}
+      WIKTIONARY_BASE_URL: ${WIKTIONARY_BASE_URL:-https://fr.wiktionary.org}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:8100}
+      NODE_ENV: development
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:

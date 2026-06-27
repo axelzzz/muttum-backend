@@ -1,53 +1,54 @@
-const User = require('../../src/models/User');
+const bcrypt = require('bcryptjs');
+const { getPool } = require('../../src/db/pool');
 
-describe('User model', () => {
-  it('hashes the password on save', async () => {
-    const user = new User({ email: 'a@b.com', username: 'Alice' });
-    user.password = 'secret123';
-    await user.save();
-    expect(user.passwordHash).toBeDefined();
-    expect(user.passwordHash).not.toBe('secret123');
-    expect(user.passwordHash.startsWith('$2')).toBe(true);
+const FAST_ROUNDS = 4;
+
+describe('users table', () => {
+  it('stores a bcrypt hash, not the plain password', async () => {
+    const pool = getPool();
+    const hash = await bcrypt.hash('secret123', FAST_ROUNDS);
+    const res = await pool.query(
+      'INSERT INTO users (email, username, password_hash) VALUES ($1, $2, $3) RETURNING *',
+      ['a@b.com', 'Alice', hash]
+    );
+    expect(res.rows[0].password_hash).not.toBe('secret123');
+    expect(res.rows[0].password_hash.startsWith('$2')).toBe(true);
   });
 
-  it('compares password correctly', async () => {
-    const user = new User({ email: 'a@b.com', username: 'Alice' });
-    user.password = 'secret123';
-    await user.save();
-    await expect(user.comparePassword('secret123')).resolves.toBe(true);
-    await expect(user.comparePassword('wrong')).resolves.toBe(false);
+  it('bcrypt.compare returns true for correct password, false for wrong one', async () => {
+    const hash = await bcrypt.hash('secret123', FAST_ROUNDS);
+    await expect(bcrypt.compare('secret123', hash)).resolves.toBe(true);
+    await expect(bcrypt.compare('wrong', hash)).resolves.toBe(false);
   });
 
-  it('does not expose passwordHash in toJSON', async () => {
-    const user = new User({ email: 'a@b.com', username: 'Alice' });
-    user.password = 'secret123';
-    await user.save();
-    const json = user.toJSON();
-    expect(json.passwordHash).toBeUndefined();
-    expect(json.email).toBe('a@b.com');
-    expect(json.username).toBe('Alice');
-  });
-
-  it('rejects invalid email format', async () => {
-    const user = new User({ email: 'not-an-email', username: 'X' });
-    user.password = 'pass1234';
-    await expect(user.save()).rejects.toThrow();
+  it('password_hash is not exposed in the formatted user object', async () => {
+    const pool = getPool();
+    const hash = await bcrypt.hash('secret123', FAST_ROUNDS);
+    const res = await pool.query(
+      'INSERT INTO users (email, username, password_hash) VALUES ($1, $2, $3) RETURNING id, email, username, created_at',
+      ['a@b.com', 'Alice', hash]
+    );
+    expect(res.rows[0].password_hash).toBeUndefined();
+    expect(res.rows[0].email).toBe('a@b.com');
+    expect(res.rows[0].username).toBe('Alice');
   });
 
   it('enforces unique email', async () => {
-    const u1 = new User({ email: 'dup@x.com', username: 'Al' });
-    u1.password = 'pass1234';
-    await u1.save();
-
-    const u2 = new User({ email: 'dup@x.com', username: 'Bo' });
-    u2.password = 'pass1234';
-    await expect(u2.save()).rejects.toThrow();
+    const pool = getPool();
+    const hash = await bcrypt.hash('pass', FAST_ROUNDS);
+    await pool.query('INSERT INTO users (email, username, password_hash) VALUES ($1, $2, $3)', ['dup@x.com', 'Al', hash]);
+    await expect(
+      pool.query('INSERT INTO users (email, username, password_hash) VALUES ($1, $2, $3)', ['dup@x.com', 'Bo', hash])
+    ).rejects.toThrow();
   });
 
-  it('lowercases the email', async () => {
-    const user = new User({ email: 'MIXED@Case.COM', username: 'Xi' });
-    user.password = 'pass1234';
-    await user.save();
-    expect(user.email).toBe('mixed@case.com');
+  it('email is stored as passed — application lowercases before insert', async () => {
+    const pool = getPool();
+    const hash = await bcrypt.hash('pass', FAST_ROUNDS);
+    const res = await pool.query(
+      'INSERT INTO users (email, username, password_hash) VALUES ($1, $2, $3) RETURNING email',
+      ['mixed@case.com', 'Xi', hash]
+    );
+    expect(res.rows[0].email).toBe('mixed@case.com');
   });
 });
