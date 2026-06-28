@@ -1,55 +1,50 @@
 # Dictionary App - Backend
 
-Node.js / Express / MongoDB backend for the Ionic dictionary application.
+Node.js / Express / TypeScript / PostgreSQL backend for the Ionic dictionary application.
 
 ## Architecture
 
-- **Shared cache**: the `words` collection stores each word only once (shared across users).
-- **Personal list**: the `userWords` collection links each user to their own words (notes, tags, favorites, history).
+- **Shared cache**: the `words` table stores each word only once (shared across users).
+- **Personal list**: the `user_words` table links each user to their own words (notes, tags, favorites, history).
 - **Search flow**: cache → fallback to Wiktionary FR API → insert into cache → upsert into user list.
 
 ## Prerequisites
 
 - Node.js 18+
-- MongoDB local OR Atlas (for dev/prod). Tests use `mongodb-memory-server` (no installation required).
+- Docker (PostgreSQL runs in a container — no system installation required)
 
 ## Installation
 
 ```bash
 npm install
 cp .env.example .env
-# edit .env (at minimum JWT_SECRET and MONGODB_URI)
+# edit .env (at minimum JWT_SECRET)
 ```
 
 ## Starting locally
 
-### 1. Start MongoDB
+### 1. Start PostgreSQL
 
 ```bash
-mkdir -p /tmp/mongodb-data
-mongod --dbpath /tmp/mongodb-data --logpath /tmp/mongod.log --fork
+docker compose up -d postgres
 ```
 
-This forks MongoDB in the background, storing data in `/tmp/mongodb-data`. Make sure `MONGODB_URI` in `.env` points to `mongodb://localhost:27017/<dbname>`.
+Data is stored in a named Docker volume (`pgdata`) and persists across restarts. The schema (`src/db/schema.sql`) is applied automatically on first boot (empty volume only).
 
 ### 2. Start the server
 
 ```bash
-npm start        # production-style (no auto-reload)
-npm run dev      # development mode with nodemon
+npm start        # ts-node (no build step)
+npm run dev      # watch mode with nodemon
 ```
 
-The server listens on the port defined by `PORT` (default: 3000). A successful startup prints:
+The server listens on the port defined by `PORT` (default: 3000).
 
-```
-✓ MongoDB connected
-✓ Server listening on port 3000 (development)
-```
-
-### Stopping MongoDB
+### Stopping PostgreSQL
 
 ```bash
-mongod --dbpath /tmp/mongodb-data --shutdown
+docker compose down          # stops containers, data preserved
+docker compose down -v       # stops containers and deletes volume (data lost)
 ```
 
 ## Endpoints
@@ -73,7 +68,7 @@ The OpenAPI 3.0 spec is served in development mode:
 - **Swagger UI**: `http://localhost:3000/api-docs`
 - **Raw JSON spec**: `http://localhost:3000/api-docs.json`
 
-The JSON endpoint is consumed by [orval](https://orval.dev/) in the frontend project to auto-generate TypeScript models and Angular services. Whenever the contract changes, update the schemas in `src/config/swagger.js` to reflect the actual response shape, then run the following from the frontend root:
+The JSON endpoint is consumed by [orval](https://orval.dev/) in the frontend project to auto-generate TypeScript models and Angular services. Whenever the contract changes, update the schemas in `src/config/swagger.ts` to reflect the actual response shape, then run the following from the frontend root:
 
 ```bash
 npm run generate:api
@@ -81,28 +76,16 @@ npm run generate:api
 
 This regenerates `src/app/core/api/` and keeps the static types in sync with the runtime responses.
 
-> Keep `src/config/swagger.js` honest: if a field is serialized as `id` in the JSON response, declare it as `id` in the schema — not `_id`. Silent mismatches between the spec and the actual payload are the main source of frontend type drift.
+> Keep `src/config/swagger.ts` honest: if a field is serialized as `id` in the JSON response, declare it as `id` in the schema — not `_id`. Silent mismatches between the spec and the actual payload are the main source of frontend type drift.
 
 ## Docker
 
-The image runs the Express server on port 3000. MongoDB runs as a separate container; the connection URI is injected at runtime via `MONGODB_URI`.
+The image runs the Express server on port 3000. PostgreSQL runs as a separate container in the same Compose stack.
 
-**Build and run standalone** (requires a running MongoDB):
-
-```bash
-docker build -t muttum-backend .
-docker run -p 3000:3000 \
-  -e MONGODB_URI=mongodb://host.docker.internal:27017/muttum \
-  -e JWT_SECRET=your-secret \
-  muttum-backend
-```
-
-**Run the full stack** from the `projets/` parent directory:
+**Run the full stack:**
 
 ```bash
-cp ../.env.example ../.env
-# edit ../.env — JWT_SECRET is required
-docker compose up --build
+docker compose up -d
 ```
 
 **Environment variables (production):**
@@ -110,7 +93,7 @@ docker compose up --build
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `JWT_SECRET` | yes | — | Must be changed; startup fails if left as the dev default |
-| `MONGODB_URI` | yes | `mongodb://localhost:27017/muttum` | Atlas URI for cloud deployments |
+| `DATABASE_URL` | yes | `postgresql://localhost:5432/dictionary-app` | PostgreSQL connection string |
 | `PORT` | no | `3000` | Listening port |
 | `JWT_EXPIRES_IN` | no | `7d` | Token lifetime |
 | `BCRYPT_SALT_ROUNDS` | no | `12` | Hashing cost factor |
@@ -119,6 +102,7 @@ docker compose up --build
 
 Key files:
 - `Dockerfile` — single-stage Node 22 Alpine image, production deps only (`--omit=dev`)
+- `docker-compose.yml` — PostgreSQL + backend services with healthcheck dependency
 - `.dockerignore` — excludes `node_modules`, `tests/`
 - `.env.example` — template for local development
 
@@ -131,40 +115,40 @@ npm run test:integration  # integration tests only
 npm run test:coverage     # with coverage report
 ```
 
-Tests use **in-memory MongoDB** (mongodb-memory-server) and **mock the Wiktionary API**: no network calls, no MongoDB installation required.
+Tests use **pg-mem** (in-memory PostgreSQL) and **mock the Wiktionary API**: no network calls, no running database required.
 
 ### Test coverage
 
 **Unit** (`tests/unit/`)
-- `dictionaryService.test.js`: HTML parser, Wiktionary response parser, API error handling
-- `userModel.test.js`: bcrypt hash, validation, password comparison, JSON serialization
-- `wordModel.test.js`: Unicode/case normalization, uniqueness
-- `wordService.test.js`: cache scenarios, isolation between users, race conditions, errors
-- `auth.test.js`: JWT signing/verification, authentication middleware
+- `dictionaryService.test.ts`: wikitext parser, Wiktionary response parser, API error handling
+- `userModel.test.ts`: bcrypt hash, validation, password comparison, JSON serialization
+- `wordModel.test.ts`: Unicode/case normalization, uniqueness
+- `wordService.test.ts`: cache scenarios, isolation between users, race conditions, errors
+- `auth.test.ts`: JWT signing/verification, authentication middleware
 
 **Integration** (`tests/integration/`)
-- `auth.test.js`: register, login, me, validation, conflicts
-- `words.test.js`: **key shared-cache scenario**, isolation, pagination, CRUD
-- `smoke.test.js`: healthcheck
+- `auth.test.ts`: register, login, me, validation, conflicts
+- `words.test.ts`: **key shared-cache scenario**, isolation, pagination, CRUD
+- `smoke.test.ts`: healthcheck
 
 ## Structure
 
 ```
 backend/
 ├── src/
-│   ├── config/        configuration (env, DB)
-│   ├── models/        User, Word, UserWord
+│   ├── config/        configuration (env vars, Swagger spec)
+│   ├── db/            pg Pool singleton + schema.sql
+│   ├── types/         domain types (index.ts) + Express augmentation (express.d.ts)
 │   ├── services/      dictionaryService, wordService
 │   ├── controllers/   authController, wordController
 │   ├── routes/        authRoutes, wordRoutes
 │   ├── middlewares/   auth, validate, errorHandler
-│   ├── utils/         jwt
-│   └── app.js
+│   └── utils/         jwt, normalize
 ├── tests/
-│   ├── fixtures/      test data (users, wiktionary)
+│   ├── fixtures/      test data (users, wiktionary responses)
 │   ├── unit/
 │   ├── integration/
-│   └── setup.js       MongoMemoryServer + cleanup
-├── server.js
+│   └── setup.ts       pg-mem setup + pool injection
+├── server.ts
 └── .env.example
 ```

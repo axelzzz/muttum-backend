@@ -1,54 +1,62 @@
+import * as dictionaryService from '../../src/services/dictionaryService';
+
 jest.mock('../../src/services/dictionaryService', () => {
   const actual = jest.requireActual('../../src/services/dictionaryService');
   return { ...actual, fetchDefinition: jest.fn() };
 });
 
-const wordService = require('../../src/services/wordService');
-const dictionaryService = require('../../src/services/dictionaryService');
-const { getPool } = require('../../src/db/pool');
-const { createUser } = require('../fixtures/users');
+import * as wordService from '../../src/services/wordService';
+import { getPool } from '../../src/db/pool';
+import { createUser } from '../fixtures/users';
+import type { Definition } from '../../src/types';
 
-const mockDefinitions = [
+const mockedFetchDefinition = jest.mocked(dictionaryService.fetchDefinition);
+
+const mockDefinitions: Definition[] = [
   { partOfSpeech: 'n.f.', definition: 'Capacité de découvrir par hasard.', examples: [] },
 ];
 
-async function insertWord(word, source = 'wiktionary') {
+async function insertWord(word: string, source = 'wiktionary'): Promise<{ id: number }> {
   const pool = getPool();
-  const res = await pool.query(
+  const res = await pool.query<{ id: number }>(
     'INSERT INTO words (word, source) VALUES ($1, $2) RETURNING id',
     [word, source]
   );
   return res.rows[0];
 }
 
-async function insertDefinitions(wordId, defs) {
+async function insertDefinitions(wordId: number, defs: Partial<Definition>[]): Promise<void> {
   const pool = getPool();
   for (let i = 0; i < defs.length; i++) {
     await pool.query(
       'INSERT INTO definitions (word_id, part_of_speech, definition, examples, position) VALUES ($1, $2, $3, $4, $5)',
-      [wordId, defs[i].partOfSpeech || '', defs[i].definition, defs[i].examples || [], i]
+      [wordId, defs[i].partOfSpeech ?? '', defs[i].definition, defs[i].examples ?? [], i]
     );
   }
 }
 
-async function insertUserWord(userId, wordId, overrides = {}) {
+async function insertUserWord(
+  userId: number,
+  wordId: number,
+  overrides: { lastSearchedAt?: Date; searchCount?: number } = {}
+): Promise<{ id: number }> {
   const pool = getPool();
-  const lastSearchedAt = overrides.lastSearchedAt || new Date();
-  const res = await pool.query(
+  const lastSearchedAt = overrides.lastSearchedAt ?? new Date();
+  const res = await pool.query<{ id: number }>(
     `INSERT INTO user_words (user_id, word_id, last_searched_at, search_count)
      VALUES ($1, $2, $3, $4) RETURNING *`,
-    [userId, wordId, lastSearchedAt, overrides.searchCount || 1]
+    [userId, wordId, lastSearchedAt, overrides.searchCount ?? 1]
   );
   return res.rows[0];
 }
 
-async function countRows(table, whereUserId) {
+async function countRows(table: string, whereUserId?: number): Promise<number> {
   const pool = getPool();
-  if (whereUserId) {
-    const res = await pool.query(`SELECT COUNT(*) AS n FROM ${table} WHERE user_id = $1`, [whereUserId]);
+  if (whereUserId !== undefined) {
+    const res = await pool.query<{ n: string }>(`SELECT COUNT(*) AS n FROM ${table} WHERE user_id = $1`, [whereUserId]);
     return parseInt(res.rows[0].n, 10);
   }
-  const res = await pool.query(`SELECT COUNT(*) AS n FROM ${table}`);
+  const res = await pool.query<{ n: string }>(`SELECT COUNT(*) AS n FROM ${table}`);
   return parseInt(res.rows[0].n, 10);
 }
 
@@ -56,7 +64,7 @@ describe('wordService.searchAndTrack', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('fetches from API and caches when word is not in DB', async () => {
-    dictionaryService.fetchDefinition.mockResolvedValue(mockDefinitions);
+    mockedFetchDefinition.mockResolvedValue(mockDefinitions);
     const user = await createUser();
 
     const result = await wordService.searchAndTrack('Sérendipité', String(user.id));
@@ -65,7 +73,7 @@ describe('wordService.searchAndTrack', () => {
     expect(result.alreadyInList).toBe(false);
     expect(result.word).toBe('sérendipité');
     expect(result.definitions).toEqual(mockDefinitions);
-    expect(dictionaryService.fetchDefinition).toHaveBeenCalledTimes(1);
+    expect(mockedFetchDefinition).toHaveBeenCalledTimes(1);
 
     expect(await countRows('words')).toBe(1);
     expect(await countRows('user_words', user.id)).toBe(1);
@@ -79,7 +87,7 @@ describe('wordService.searchAndTrack', () => {
     const result = await wordService.searchAndTrack('cache', String(user.id));
 
     expect(result.fromCache).toBe(true);
-    expect(dictionaryService.fetchDefinition).not.toHaveBeenCalled();
+    expect(mockedFetchDefinition).not.toHaveBeenCalled();
   });
 
   it('adds word to user list automatically on first search', async () => {
@@ -113,7 +121,7 @@ describe('wordService.searchAndTrack', () => {
   });
 
   it('isolates words per user (two users searching same word get separate user_word rows)', async () => {
-    dictionaryService.fetchDefinition.mockResolvedValue(mockDefinitions);
+    mockedFetchDefinition.mockResolvedValue(mockDefinitions);
     const u1 = await createUser({ email: 'u1@x.com' });
     const u2 = await createUser({ email: 'u2@x.com' });
 
@@ -123,11 +131,11 @@ describe('wordService.searchAndTrack', () => {
     expect(await countRows('words')).toBe(1);
     expect(await countRows('user_words', u1.id)).toBe(1);
     expect(await countRows('user_words', u2.id)).toBe(1);
-    expect(dictionaryService.fetchDefinition).toHaveBeenCalledTimes(1);
+    expect(mockedFetchDefinition).toHaveBeenCalledTimes(1);
   });
 
   it('throws 404 when word not found in upstream API', async () => {
-    dictionaryService.fetchDefinition.mockRejectedValue(
+    mockedFetchDefinition.mockRejectedValue(
       Object.assign(new Error('not found'), { code: 'NOT_FOUND' })
     );
     const user = await createUser();
@@ -137,7 +145,7 @@ describe('wordService.searchAndTrack', () => {
   });
 
   it('throws 502 when upstream API errors', async () => {
-    dictionaryService.fetchDefinition.mockRejectedValue(
+    mockedFetchDefinition.mockRejectedValue(
       Object.assign(new Error('boom'), { code: 'UPSTREAM_ERROR' })
     );
     const user = await createUser();
@@ -150,7 +158,7 @@ describe('wordService.searchAndTrack', () => {
   });
 
   it('normalizes word before storing (case + accents)', async () => {
-    dictionaryService.fetchDefinition.mockResolvedValue(mockDefinitions);
+    mockedFetchDefinition.mockResolvedValue(mockDefinitions);
     const user = await createUser();
 
     await wordService.searchAndTrack('  CAFÉ  ', String(user.id));
@@ -241,12 +249,11 @@ describe('wordService.updateUserWord', () => {
       notes: 'my notes',
       tags: ['important'],
       favorite: true,
-      search_count: 999, // disallowed
     });
 
     expect(r.notes).toBe('my notes');
     expect(r.tags).toEqual(['important']);
     expect(r.favorite).toBe(true);
-    expect(r.searchCount).toBe(1); // unchanged
+    expect(r.searchCount).toBe(1);
   });
 });

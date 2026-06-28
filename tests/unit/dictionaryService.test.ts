@@ -1,15 +1,16 @@
-jest.mock('axios');
-const axios = require('axios');
-
-const dictionaryService = require('../../src/services/dictionaryService');
-const {
+import axios from 'axios';
+import * as dictionaryService from '../../src/services/dictionaryService';
+import {
   wiktionarySerendipiteWikitext,
   wiktionarySerendipiteResponse,
   wiktionaryEmptyResponse,
   wiktionaryNoFrResponse,
   wiktionaryMissingResponse,
   expectedSerendipiteParsed,
-} = require('../fixtures/wiktionary');
+} from '../fixtures/wiktionary';
+
+jest.mock('axios');
+const mockedAxios = axios as jest.Mocked<typeof axios>;
 
 describe('dictionaryService', () => {
   describe('cleanWikitext', () => {
@@ -34,7 +35,7 @@ describe('dictionaryService', () => {
     });
 
     it('collapses whitespace', () => {
-      expect(dictionaryService.cleanWikitext('  trop   d\'espaces  ')).toBe("trop d'espaces");
+      expect(dictionaryService.cleanWikitext("  trop   d'espaces  ")).toBe("trop d'espaces");
     });
 
     it('returns empty string for non-string input', () => {
@@ -95,50 +96,50 @@ describe('dictionaryService', () => {
     });
 
     it('returns parsed definitions on success', async () => {
-      axios.get.mockResolvedValue({ status: 200, data: wiktionarySerendipiteResponse });
+      mockedAxios.get.mockResolvedValue({ status: 200, data: wiktionarySerendipiteResponse });
       const result = await dictionaryService.fetchDefinition('sérendipité');
       expect(result).toEqual(expectedSerendipiteParsed);
-      expect(axios.get).toHaveBeenCalledTimes(1);
-      expect(axios.get.mock.calls[0][1].params).toMatchObject({ page: 'sérendipité' });
+      expect(mockedAxios.get).toHaveBeenCalledTimes(1);
+      expect(mockedAxios.get.mock.calls[0][1]?.params).toMatchObject({ page: 'sérendipité' });
     });
 
     it('throws NOT_FOUND on 404 response', async () => {
-      axios.get.mockResolvedValue({ status: 404, data: {} });
+      mockedAxios.get.mockResolvedValue({ status: 404, data: {} });
       await expect(dictionaryService.fetchDefinition('motinconnu')).rejects.toMatchObject({
         code: 'NOT_FOUND',
       });
     });
 
     it('throws NOT_FOUND on missingtitle API error', async () => {
-      axios.get.mockResolvedValue({ status: 200, data: wiktionaryMissingResponse });
+      mockedAxios.get.mockResolvedValue({ status: 200, data: wiktionaryMissingResponse });
       await expect(dictionaryService.fetchDefinition('motinconnu')).rejects.toMatchObject({
         code: 'NOT_FOUND',
       });
     });
 
     it('throws NOT_FOUND when no French definitions are available', async () => {
-      axios.get.mockResolvedValue({ status: 200, data: wiktionaryNoFrResponse });
+      mockedAxios.get.mockResolvedValue({ status: 200, data: wiktionaryNoFrResponse });
       await expect(dictionaryService.fetchDefinition('hello')).rejects.toMatchObject({
         code: 'NOT_FOUND',
       });
     });
 
     it('throws NOT_FOUND when French section has no definitions', async () => {
-      axios.get.mockResolvedValue({ status: 200, data: wiktionaryEmptyResponse });
+      mockedAxios.get.mockResolvedValue({ status: 200, data: wiktionaryEmptyResponse });
       await expect(dictionaryService.fetchDefinition('test')).rejects.toMatchObject({
         code: 'NOT_FOUND',
       });
     });
 
     it('throws UPSTREAM_ERROR on network failure', async () => {
-      axios.get.mockRejectedValue(new Error('ECONNREFUSED'));
+      mockedAxios.get.mockRejectedValue(new Error('ECONNREFUSED'));
       await expect(dictionaryService.fetchDefinition('test')).rejects.toMatchObject({
         code: 'UPSTREAM_ERROR',
       });
     });
 
     it('throws UPSTREAM_ERROR on 4xx (not 404)', async () => {
-      axios.get.mockResolvedValue({ status: 429, data: {} });
+      mockedAxios.get.mockResolvedValue({ status: 429, data: {} });
       await expect(dictionaryService.fetchDefinition('test')).rejects.toMatchObject({
         code: 'UPSTREAM_ERROR',
       });

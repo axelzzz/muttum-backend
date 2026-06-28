@@ -1,5 +1,5 @@
-const bcrypt = require('bcryptjs');
-const { getPool } = require('../../src/db/pool');
+import bcrypt from 'bcryptjs';
+import { getPool } from '../../src/db/pool';
 
 const FAST_ROUNDS = 4;
 

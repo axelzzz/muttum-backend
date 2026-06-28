@@ -1,21 +1,43 @@
-const { getPool } = require('../db/pool');
-const dictionaryService = require('./dictionaryService');
-const { normalizeWord } = require('../utils/normalize');
+import type { Pool } from 'pg';
+import { getPool } from '../db/pool';
+import { fetchDefinition } from './dictionaryService';
+import { normalizeWord } from '../utils/normalize';
+import type { Definition, SearchResult, UserWordDto, UserWordList } from '../types';
 
 const DEFAULT_PAGE_LIMIT = 20;
 const MAX_PAGE_LIMIT = 100;
 
-function httpError(message, status) {
-  const err = new Error(message);
-  err.status = status;
-  return err;
+interface HttpError extends Error {
+  status: number;
 }
 
-function toInt(id) {
-  return parseInt(id, 10);
+function httpError(message: string, status: number): HttpError {
+  return Object.assign(new Error(message), { status }) as HttpError;
 }
 
-function formatUserWord(uw, wordText, definitions) {
+function toInt(id: string | number): number {
+  return parseInt(String(id), 10);
+}
+
+interface UserWordRow {
+  id: number;
+  notes: string | null;
+  tags: string[] | null;
+  favorite: boolean;
+  first_searched_at: Date;
+  last_searched_at: Date;
+  search_count: number;
+  word_id: number;
+  word: string;
+}
+
+interface DefinitionRow {
+  part_of_speech: string | null;
+  definition: string;
+  examples: string[] | null;
+}
+
+function formatUserWord(uw: UserWordRow, wordText: string, definitions: Definition[]): UserWordDto {
   return {
     id: String(uw.id),
     word: wordText,
@@ -23,38 +45,39 @@ function formatUserWord(uw, wordText, definitions) {
     firstSearchedAt: uw.first_searched_at,
     lastSearchedAt: uw.last_searched_at,
     searchCount: uw.search_count,
-    notes: uw.notes || '',
-    tags: uw.tags || [],
+    notes: uw.notes ?? '',
+    tags: uw.tags ?? [],
     favorite: uw.favorite,
   };
 }
 
-function buildDefinitions(rows) {
+function buildDefinitions(rows: DefinitionRow[]): Definition[] {
   return rows.map((r) => ({
-    partOfSpeech: r.part_of_speech || '',
+    partOfSpeech: r.part_of_speech ?? '',
     definition: r.definition,
-    examples: r.examples || [],
+    examples: r.examples ?? [],
   }));
 }
 
-async function getDefinitions(pool, wordId) {
-  const res = await pool.query(
+async function getDefinitions(pool: Pool, wordId: number): Promise<Definition[]> {
+  const res = await pool.query<DefinitionRow>(
     'SELECT part_of_speech, definition, examples FROM definitions WHERE word_id = $1 ORDER BY position',
     [wordId]
   );
   return buildDefinitions(res.rows);
 }
 
-async function fetchFromDictionary(normalized) {
+async function fetchFromDictionary(normalized: string): Promise<Definition[]> {
   try {
-    return await dictionaryService.fetchDefinition(normalized);
+    return await fetchDefinition(normalized);
   } catch (err) {
-    if (err.code === 'NOT_FOUND') throw httpError(`Word "${normalized}" not found in dictionary`, 404);
+    const e = err as { code?: string };
+    if (e.code === 'NOT_FOUND') throw httpError(`Word "${normalized}" not found in dictionary`, 404);
     throw httpError('Dictionary service unavailable', 502);
   }
 }
 
-async function insertDefinitions(pool, wordId, definitions) {
+async function insertDefinitions(pool: Pool, wordId: number, definitions: Definition[]): Promise<void> {
   await Promise.all(
     definitions.map((def, i) =>
       pool.query(
@@ -67,11 +90,11 @@ async function insertDefinitions(pool, wordId, definitions) {
   );
 }
 
-async function fetchAndCacheWord(pool, normalized) {
+async function fetchAndCacheWord(pool: Pool, normalized: string): Promise<{ wordId: number; fromCache: boolean }> {
   const definitions = await fetchFromDictionary(normalized);
 
   // ON CONFLICT ensures atomic upsert even under concurrent inserts for the same word
-  const wordRes = await pool.query(
+  const wordRes = await pool.query<{ id: number }>(
     `INSERT INTO words (word, source) VALUES ($1, 'wiktionary')
      ON CONFLICT (word) DO UPDATE SET source = EXCLUDED.source
      RETURNING id`,
@@ -83,8 +106,8 @@ async function fetchAndCacheWord(pool, normalized) {
   return { wordId, fromCache: false };
 }
 
-async function resolveWord(pool, normalized) {
-  const res = await pool.query('SELECT id FROM words WHERE word = $1', [normalized]);
+async function resolveWord(pool: Pool, normalized: string): Promise<{ wordId: number; fromCache: boolean }> {
+  const res = await pool.query<{ id: number }>('SELECT id FROM words WHERE word = $1', [normalized]);
   if (res.rows.length > 0) {
     const wordId = res.rows[0].id;
     // Backfill definitions for words cached before the definitions table existed
@@ -98,10 +121,14 @@ async function resolveWord(pool, normalized) {
   return fetchAndCacheWord(pool, normalized);
 }
 
-async function trackSearch(pool, userId, wordId) {
+async function trackSearch(
+  pool: Pool,
+  userId: number,
+  wordId: number
+): Promise<{ userWordId: number; alreadyInList: boolean }> {
   try {
     // search_count > 1 after upsert means the row pre-existed (alreadyInList = true)
-    const res = await pool.query(
+    const res = await pool.query<{ id: number; search_count: number }>(
       `INSERT INTO user_words (user_id, word_id, first_searched_at, last_searched_at, search_count)
        VALUES ($1, $2, now(), now(), 1)
        ON CONFLICT (user_id, word_id)
@@ -113,13 +140,14 @@ async function trackSearch(pool, userId, wordId) {
     return { userWordId: row.id, alreadyInList: row.search_count > 1 };
   } catch (err) {
     // word_id is already resolved at this point, so any FK violation must be on user_id
-    const isFkViolation = err.code === '23503' || /foreign key/i.test(err.message || '');
+    const e = err as { code?: string; message?: string };
+    const isFkViolation = e.code === '23503' || /foreign key/i.test(e.message ?? '');
     if (isFkViolation) throw httpError('Invalid or expired session', 401);
     throw err;
   }
 }
 
-async function searchAndTrack(rawWord, userId) {
+export async function searchAndTrack(rawWord: string, userId: string): Promise<SearchResult> {
   const normalized = normalizeWord(rawWord);
   if (!normalized) throw httpError('Word is required', 400);
 
@@ -129,7 +157,7 @@ async function searchAndTrack(rawWord, userId) {
   const { wordId, fromCache } = await resolveWord(pool, normalized);
   const { userWordId, alreadyInList } = await trackSearch(pool, numericUserId, wordId);
 
-  const wordRow = (await pool.query('SELECT word, source FROM words WHERE id = $1', [wordId])).rows[0];
+  const wordRow = (await pool.query<{ word: string; source: string }>('SELECT word, source FROM words WHERE id = $1', [wordId])).rows[0];
   const definitions = await getDefinitions(pool, wordId);
 
   return {
@@ -140,25 +168,37 @@ async function searchAndTrack(rawWord, userId) {
     source: wordRow.source,
     fromCache,
     alreadyInList,
+    firstSearchedAt: new Date(),
+    lastSearchedAt: new Date(),
+    searchCount: 1,
+    notes: '',
+    tags: [],
+    favorite: false,
   };
 }
 
-async function listUserWords(userId, { page = 1, limit = 20, search = '' } = {}) {
+interface ListOptions {
+  page?: string | number;
+  limit?: string | number;
+  search?: string;
+}
+
+export async function listUserWords(userId: string, options: ListOptions = {}): Promise<UserWordList> {
   const pool = getPool();
   const numericUserId = toInt(userId);
-  const safePage = Math.max(1, parseInt(page, 10) || 1);
-  const safeLimit = Math.min(MAX_PAGE_LIMIT, Math.max(1, parseInt(limit, 10) || DEFAULT_PAGE_LIMIT));
+  const safePage = Math.max(1, parseInt(String(options.page ?? 1), 10) || 1);
+  const safeLimit = Math.min(MAX_PAGE_LIMIT, Math.max(1, parseInt(String(options.limit ?? DEFAULT_PAGE_LIMIT), 10) || DEFAULT_PAGE_LIMIT));
   const offset = (safePage - 1) * safeLimit;
-  const searchTerm = search || '';
+  const searchTerm = options.search ?? '';
 
   const [countRes, rowsRes] = await Promise.all([
-    pool.query(
+    pool.query<{ total: string }>(
       `SELECT COUNT(*) AS total
        FROM user_words uw JOIN words w ON w.id = uw.word_id
        WHERE uw.user_id = $1 AND ($2 = '' OR w.word ILIKE '%' || $2 || '%')`,
       [numericUserId, searchTerm]
     ),
-    pool.query(
+    pool.query<UserWordRow>(
       `SELECT uw.id, uw.notes, uw.tags, uw.favorite,
               uw.first_searched_at, uw.last_searched_at, uw.search_count,
               w.id AS word_id, w.word
@@ -172,28 +212,28 @@ async function listUserWords(userId, { page = 1, limit = 20, search = '' } = {})
 
   const total = parseInt(countRes.rows[0].total, 10);
   // Parse to integers so pg-mem infers BIGINT[] instead of TEXT[] for ANY($1)
-  const wordIds = rowsRes.rows.map((r) => parseInt(r.word_id, 10));
+  const wordIds = rowsRes.rows.map((r) => parseInt(String(r.word_id), 10));
 
-  const defsByWordId = {};
+  const defsByWordId: Record<number, Definition[]> = {};
   if (wordIds.length > 0) {
     const placeholders = wordIds.map((_, i) => `$${i + 1}`).join(', ');
-    const defRes = await pool.query(
+    const defRes = await pool.query<DefinitionRow & { word_id: number }>(
       `SELECT word_id, part_of_speech, definition, examples FROM definitions WHERE word_id IN (${placeholders}) ORDER BY word_id, position`,
       wordIds
     );
     for (const row of defRes.rows) {
-      const key = parseInt(row.word_id, 10);
+      const key = parseInt(String(row.word_id), 10);
       if (!defsByWordId[key]) defsByWordId[key] = [];
       defsByWordId[key].push({
-        partOfSpeech: row.part_of_speech || '',
+        partOfSpeech: row.part_of_speech ?? '',
         definition: row.definition,
-        examples: row.examples || [],
+        examples: row.examples ?? [],
       });
     }
   }
 
   const items = rowsRes.rows.map((uw) =>
-    formatUserWord(uw, uw.word, defsByWordId[parseInt(uw.word_id, 10)] || [])
+    formatUserWord(uw, uw.word, defsByWordId[parseInt(String(uw.word_id), 10)] ?? [])
   );
 
   return {
@@ -202,9 +242,9 @@ async function listUserWords(userId, { page = 1, limit = 20, search = '' } = {})
   };
 }
 
-async function getUserWord(userId, userWordId) {
+export async function getUserWord(userId: string, userWordId: string): Promise<UserWordDto> {
   const pool = getPool();
-  const res = await pool.query(
+  const res = await pool.query<UserWordRow>(
     `SELECT uw.id, uw.notes, uw.tags, uw.favorite,
             uw.first_searched_at, uw.last_searched_at, uw.search_count,
             w.id AS word_id, w.word
@@ -220,10 +260,16 @@ async function getUserWord(userId, userWordId) {
   return formatUserWord(uw, uw.word, definitions);
 }
 
-async function updateUserWord(userId, userWordId, payload) {
+interface UpdatePayload {
+  notes?: string;
+  tags?: string[];
+  favorite?: boolean;
+}
+
+export async function updateUserWord(userId: string, userWordId: string, payload: UpdatePayload): Promise<UserWordDto> {
   const pool = getPool();
-  const sets = [];
-  const values = [];
+  const sets: string[] = [];
+  const values: unknown[] = [];
 
   if (typeof payload.notes === 'string') sets.push(`notes = $${values.push(payload.notes)}`);
   if (Array.isArray(payload.tags)) sets.push(`tags = $${values.push(payload.tags)}`);
@@ -239,16 +285,16 @@ async function updateUserWord(userId, userWordId, payload) {
     `UPDATE user_words SET ${sets.join(', ')}
      WHERE id = $${idIdx} AND user_id = $${userIdIdx}
      RETURNING id`,
-    values
+    values as unknown[]
   );
 
   if (res.rows.length === 0) throw httpError('Word not found in your list', 404);
   return getUserWord(userId, userWordId);
 }
 
-async function deleteUserWord(userId, userWordId) {
+export async function deleteUserWord(userId: string, userWordId: string): Promise<{ id: string }> {
   const pool = getPool();
-  const res = await pool.query(
+  const res = await pool.query<{ id: number }>(
     'DELETE FROM user_words WHERE id = $1 AND user_id = $2 RETURNING id',
     [toInt(userWordId), toInt(userId)]
   );
@@ -256,5 +302,3 @@ async function deleteUserWord(userId, userWordId) {
   if (res.rows.length === 0) throw httpError('Word not found in your list', 404);
   return { id: String(res.rows[0].id) };
 }
-
-module.exports = { searchAndTrack, listUserWords, getUserWord, updateUserWord, deleteUserWord };

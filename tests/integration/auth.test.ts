@@ -1,7 +1,7 @@
-const request = require('supertest');
-const createApp = require('../../src/app');
-const { createUser } = require('../fixtures/users');
-const { sign } = require('../../src/utils/jwt');
+import request from 'supertest';
+import createApp from '../../src/app';
+import { createUser } from '../fixtures/users';
+import { sign } from '../../src/utils/jwt';
 
 const app = createApp();
 

@@ -1,10 +1,10 @@
-const express = require('express');
-const { body } = require('express-validator');
-const validate = require('../middlewares/validate');
-const auth = require('../middlewares/auth');
-const ctrl = require('../controllers/authController');
+import { Router } from 'express';
+import { body } from 'express-validator';
+import validate from '../middlewares/validate';
+import authMiddleware from '../middlewares/auth';
+import * as ctrl from '../controllers/authController';
 
-const router = express.Router();
+const router = Router();
 
 /**
  * @openapi
@@ -124,6 +124,6 @@ router.post(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get('/me', auth, ctrl.me);
+router.get('/me', authMiddleware, ctrl.me);
 
-module.exports = router;
+export default router;

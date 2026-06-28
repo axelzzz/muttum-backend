@@ -1,5 +1,5 @@
-const { normalizeWord } = require('../../src/utils/normalize');
-const { getPool } = require('../../src/db/pool');
+import { normalizeWord } from '../../src/utils/normalize';
+import { getPool } from '../../src/db/pool';
 
 describe('normalizeWord', () => {
   it('lowercases', () => {
@@ -11,7 +11,7 @@ describe('normalizeWord', () => {
   });
 
   it('normalizes Unicode to NFC', () => {
-    const decomposed = 'é'; // é as two code points
+    const decomposed = 'é'; // é as two code points
     const composed = 'é';    // é as one code point
     expect(normalizeWord(decomposed)).toBe(composed);
   });

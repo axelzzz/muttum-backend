@@ -1,38 +1,41 @@
+import * as dictionaryService from '../../src/services/dictionaryService';
+
 jest.mock('../../src/services/dictionaryService', () => {
   const actual = jest.requireActual('../../src/services/dictionaryService');
   return { ...actual, fetchDefinition: jest.fn() };
 });
 
-const request = require('supertest');
-const createApp = require('../../src/app');
-const dictionaryService = require('../../src/services/dictionaryService');
-const { getPool } = require('../../src/db/pool');
-const { createUserAndToken } = require('../fixtures/users');
-const { sign } = require('../../src/utils/jwt');
+import request from 'supertest';
+import createApp from '../../src/app';
+import { getPool } from '../../src/db/pool';
+import { createUserAndToken } from '../fixtures/users';
+import { sign } from '../../src/utils/jwt';
+import type { Definition } from '../../src/types';
 
+const mockedFetchDefinition = jest.mocked(dictionaryService.fetchDefinition);
 const app = createApp();
 
-const sampleDefs = [
+const sampleDefs: Definition[] = [
   { partOfSpeech: 'n.f.', definition: 'Capacité de découvrir par hasard.', examples: ['exemple'] },
 ];
 
-async function countWords() {
-  const res = await getPool().query('SELECT COUNT(*) AS n FROM words');
+async function countWords(): Promise<number> {
+  const res = await getPool().query<{ n: string }>('SELECT COUNT(*) AS n FROM words');
   return parseInt(res.rows[0].n, 10);
 }
 
-async function countUserWords(userId) {
-  if (userId) {
-    const res = await getPool().query('SELECT COUNT(*) AS n FROM user_words WHERE user_id = $1', [userId]);
+async function countUserWords(userId?: number): Promise<number> {
+  if (userId !== undefined) {
+    const res = await getPool().query<{ n: string }>('SELECT COUNT(*) AS n FROM user_words WHERE user_id = $1', [userId]);
     return parseInt(res.rows[0].n, 10);
   }
-  const res = await getPool().query('SELECT COUNT(*) AS n FROM user_words');
+  const res = await getPool().query<{ n: string }>('SELECT COUNT(*) AS n FROM user_words');
   return parseInt(res.rows[0].n, 10);
 }
 
-async function findUserWord(userId) {
+async function findUserWord(userId: number): Promise<Record<string, unknown> | null> {
   const res = await getPool().query('SELECT * FROM user_words WHERE user_id = $1', [userId]);
-  return res.rows[0] || null;
+  return res.rows[0] ?? null;
 }
 
 describe('GET /api/words/search', () => {
@@ -45,7 +48,7 @@ describe('GET /api/words/search', () => {
 
   it('returns 401 when JWT references a nonexistent user', async () => {
     const token = sign({ sub: '99999', email: 'ghost@x.com' });
-    dictionaryService.fetchDefinition.mockResolvedValue(sampleDefs);
+    mockedFetchDefinition.mockResolvedValue(sampleDefs);
     const res = await request(app)
       .get('/api/words/search?word=hello')
       .set('Authorization', `Bearer ${token}`);
@@ -61,7 +64,7 @@ describe('GET /api/words/search', () => {
   });
 
   it('CORE SCENARIO — first user fetches from API, caches in DB, adds to their list', async () => {
-    dictionaryService.fetchDefinition.mockResolvedValue(sampleDefs);
+    mockedFetchDefinition.mockResolvedValue(sampleDefs);
     const { token, user } = await createUserAndToken({ email: 'first@x.com' });
 
     const res = await request(app)
@@ -73,19 +76,19 @@ describe('GET /api/words/search', () => {
     expect(res.body.alreadyInList).toBe(false);
     expect(res.body.word).toBe('sérendipité');
     expect(res.body.definitions).toEqual(sampleDefs);
-    expect(dictionaryService.fetchDefinition).toHaveBeenCalledTimes(1);
+    expect(mockedFetchDefinition).toHaveBeenCalledTimes(1);
 
     expect(await countWords()).toBe(1);
     expect(await countUserWords(user.id)).toBe(1);
   });
 
   it('CORE SCENARIO — second user searching same word reads from cache (no API call)', async () => {
-    dictionaryService.fetchDefinition.mockResolvedValue(sampleDefs);
+    mockedFetchDefinition.mockResolvedValue(sampleDefs);
     const { token: t1 } = await createUserAndToken({ email: 'a@x.com' });
     const { token: t2, user: u2 } = await createUserAndToken({ email: 'b@x.com' });
 
     await request(app).get('/api/words/search?word=mutuel').set('Authorization', `Bearer ${t1}`);
-    expect(dictionaryService.fetchDefinition).toHaveBeenCalledTimes(1);
+    expect(mockedFetchDefinition).toHaveBeenCalledTimes(1);
 
     const res = await request(app)
       .get('/api/words/search?word=mutuel')
@@ -94,7 +97,7 @@ describe('GET /api/words/search', () => {
     expect(res.status).toBe(200);
     expect(res.body.fromCache).toBe(true);
     expect(res.body.alreadyInList).toBe(false);
-    expect(dictionaryService.fetchDefinition).toHaveBeenCalledTimes(1);
+    expect(mockedFetchDefinition).toHaveBeenCalledTimes(1);
 
     expect(await countWords()).toBe(1);
     expect(await countUserWords(u2.id)).toBe(1);
@@ -102,7 +105,7 @@ describe('GET /api/words/search', () => {
   });
 
   it('repeated search by same user does not duplicate UserWord, increments searchCount', async () => {
-    dictionaryService.fetchDefinition.mockResolvedValue(sampleDefs);
+    mockedFetchDefinition.mockResolvedValue(sampleDefs);
     const { token, user } = await createUserAndToken();
 
     await request(app).get('/api/words/search?word=double').set('Authorization', `Bearer ${token}`);
@@ -113,11 +116,11 @@ describe('GET /api/words/search', () => {
     expect(r2.body.alreadyInList).toBe(true);
     expect(await countUserWords(user.id)).toBe(1);
     const uw = await findUserWord(user.id);
-    expect(uw.search_count).toBe(2);
+    expect(uw?.search_count).toBe(2);
   });
 
   it('returns 404 when word does not exist in upstream API', async () => {
-    dictionaryService.fetchDefinition.mockRejectedValue(
+    mockedFetchDefinition.mockRejectedValue(
       Object.assign(new Error('not found'), { code: 'NOT_FOUND' })
     );
     const { token } = await createUserAndToken();
@@ -132,7 +135,7 @@ describe('GET /api/words/search', () => {
   });
 
   it('returns 502 when upstream API is unreachable', async () => {
-    dictionaryService.fetchDefinition.mockRejectedValue(
+    mockedFetchDefinition.mockRejectedValue(
       Object.assign(new Error('timeout'), { code: 'UPSTREAM_ERROR' })
     );
     const { token } = await createUserAndToken();
@@ -143,7 +146,7 @@ describe('GET /api/words/search', () => {
   });
 
   it('normalizes accents/case so duplicates collapse', async () => {
-    dictionaryService.fetchDefinition.mockResolvedValue(sampleDefs);
+    mockedFetchDefinition.mockResolvedValue(sampleDefs);
     const { token } = await createUserAndToken();
 
     await request(app).get('/api/words/search?word=CAFÉ').set('Authorization', `Bearer ${token}`);
@@ -153,7 +156,7 @@ describe('GET /api/words/search', () => {
 
     expect(r2.body.fromCache).toBe(true);
     expect(await countWords()).toBe(1);
-    expect(dictionaryService.fetchDefinition).toHaveBeenCalledTimes(1);
+    expect(mockedFetchDefinition).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -161,7 +164,7 @@ describe('GET /api/words', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('lists only the user own words', async () => {
-    dictionaryService.fetchDefinition.mockResolvedValue(sampleDefs);
+    mockedFetchDefinition.mockResolvedValue(sampleDefs);
     const { token: t1 } = await createUserAndToken({ email: 'u1@x.com' });
     const { token: t2 } = await createUserAndToken({ email: 'u2@x.com' });
 
@@ -179,7 +182,7 @@ describe('GET /api/words', () => {
   });
 
   it('supports pagination', async () => {
-    dictionaryService.fetchDefinition.mockResolvedValue(sampleDefs);
+    mockedFetchDefinition.mockResolvedValue(sampleDefs);
     const { token } = await createUserAndToken();
 
     for (const w of ['un', 'deux', 'trois', 'quatre', 'cinq']) {
@@ -202,7 +205,7 @@ describe('GET /api/words', () => {
 
 describe('GET /api/words/:id', () => {
   it('returns the word if it belongs to the user', async () => {
-    dictionaryService.fetchDefinition.mockResolvedValue(sampleDefs);
+    mockedFetchDefinition.mockResolvedValue(sampleDefs);
     const { token } = await createUserAndToken();
 
     await request(app).get('/api/words/search?word=detail').set('Authorization', `Bearer ${token}`);
@@ -215,7 +218,7 @@ describe('GET /api/words/:id', () => {
   });
 
   it('returns 404 if word belongs to another user', async () => {
-    dictionaryService.fetchDefinition.mockResolvedValue(sampleDefs);
+    mockedFetchDefinition.mockResolvedValue(sampleDefs);
     const { token: t1 } = await createUserAndToken({ email: 'a@x.com' });
     const { token: t2 } = await createUserAndToken({ email: 'b@x.com' });
 
@@ -238,7 +241,7 @@ describe('GET /api/words/:id', () => {
 
 describe('PATCH /api/words/:id', () => {
   it('updates notes, tags, favorite', async () => {
-    dictionaryService.fetchDefinition.mockResolvedValue(sampleDefs);
+    mockedFetchDefinition.mockResolvedValue(sampleDefs);
     const { token } = await createUserAndToken();
     await request(app).get('/api/words/search?word=edit').set('Authorization', `Bearer ${token}`);
     const list = await request(app).get('/api/words').set('Authorization', `Bearer ${token}`);
@@ -258,7 +261,7 @@ describe('PATCH /api/words/:id', () => {
 
 describe('DELETE /api/words/:id', () => {
   it('removes from user list but keeps word in shared cache', async () => {
-    dictionaryService.fetchDefinition.mockResolvedValue(sampleDefs);
+    mockedFetchDefinition.mockResolvedValue(sampleDefs);
     const { token } = await createUserAndToken();
     await request(app).get('/api/words/search?word=remove').set('Authorization', `Bearer ${token}`);
     const list = await request(app).get('/api/words').set('Authorization', `Bearer ${token}`);
@@ -274,7 +277,7 @@ describe('DELETE /api/words/:id', () => {
   });
 
   it('returns 404 when trying to delete word of another user', async () => {
-    dictionaryService.fetchDefinition.mockResolvedValue(sampleDefs);
+    mockedFetchDefinition.mockResolvedValue(sampleDefs);
     const { token: t1 } = await createUserAndToken({ email: 'a@x.com' });
     const { token: t2 } = await createUserAndToken({ email: 'b@x.com' });
 

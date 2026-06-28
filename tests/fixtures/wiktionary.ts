@@ -1,4 +1,6 @@
-const wiktionarySerendipiteWikitext = `== {{langue|fr}} ==
+import type { Definition } from '../../src/types';
+
+export const wiktionarySerendipiteWikitext = `== {{langue|fr}} ==
 === {{S|nom|fr}} ===
 '''sérendipité''' {{f}}
 # ''Capacité'' de faire des découvertes par hasard.
@@ -7,32 +9,32 @@ const wiktionarySerendipiteWikitext = `== {{langue|fr}} ==
 `;
 
 // Simulates a successful API response from fr.wiktionary.org/w/api.php
-const wiktionarySerendipiteResponse = {
+export const wiktionarySerendipiteResponse = {
   parse: {
     wikitext: { '*': wiktionarySerendipiteWikitext },
   },
 };
 
 // French section exists but contains only non-definition sections
-const wiktionaryEmptyResponse = {
+export const wiktionaryEmptyResponse = {
   parse: {
     wikitext: { '*': '== {{langue|fr}} ==\n=== {{S|étymologie}} ===\n: Du latin.\n' },
   },
 };
 
 // No French section at all
-const wiktionaryNoFrResponse = {
+export const wiktionaryNoFrResponse = {
   parse: {
     wikitext: { '*': '== {{langue|en}} ==\n=== {{S|nom|en}} ===\n# An English noun.\n' },
   },
 };
 
 // API error for a missing page
-const wiktionaryMissingResponse = {
+export const wiktionaryMissingResponse = {
   error: { code: 'missingtitle', info: "The page you specified doesn't exist." },
 };
 
-const expectedSerendipiteParsed = [
+export const expectedSerendipiteParsed: Definition[] = [
   {
     partOfSpeech: 'Nom commun',
     definition: 'Capacité de faire des découvertes par hasard.',
@@ -44,12 +46,3 @@ const expectedSerendipiteParsed = [
     examples: [],
   },
 ];
-
-module.exports = {
-  wiktionarySerendipiteWikitext,
-  wiktionarySerendipiteResponse,
-  wiktionaryEmptyResponse,
-  wiktionaryNoFrResponse,
-  wiktionaryMissingResponse,
-  expectedSerendipiteParsed,
-};

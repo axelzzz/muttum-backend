@@ -1,17 +1,20 @@
-const axios = require('axios');
-const config = require('../config');
+import axios, { AxiosResponse } from 'axios';
+import config from '../config';
+import type { Definition, DictionaryErrorCode } from '../types';
 
 const WIKTIONARY_TIMEOUT_MS = 8000;
 
-class DictionaryError extends Error {
-  constructor(message, code) {
+export class DictionaryError extends Error {
+  readonly code: DictionaryErrorCode;
+
+  constructor(message: string, code: DictionaryErrorCode) {
     super(message);
     this.name = 'DictionaryError';
     this.code = code;
   }
 }
 
-const POS_MAP = {
+const POS_MAP: Record<string, string> = {
   'nom': 'Nom commun',
   'verbe': 'Verbe',
   'adj': 'Adjectif',
@@ -41,13 +44,23 @@ const NON_DEF_SECTIONS = new Set([
   'hyponymes', 'hyperonymes', 'holonymes', 'méronymes',
 ]);
 
-function validateApiResponse(response, word) {
+interface WiktionaryResponse {
+  parse?: {
+    wikitext?: { '*': string };
+  };
+  error?: {
+    code: string;
+    info?: string;
+  };
+}
+
+function validateApiResponse(response: AxiosResponse<WiktionaryResponse>, word: string): void {
   if (response.data?.error) {
     if (response.data.error.code === 'missingtitle') {
       throw new DictionaryError(`Word "${word}" not found`, 'NOT_FOUND');
     }
     throw new DictionaryError(
-      `Upstream dictionary error: ${response.data.error.info || response.data.error.code}`,
+      `Upstream dictionary error: ${response.data.error.info ?? response.data.error.code}`,
       'UPSTREAM_ERROR'
     );
   }
@@ -59,23 +72,26 @@ function validateApiResponse(response, word) {
   }
 }
 
-async function fetchDefinition(word) {
+export async function fetchDefinition(word: unknown): Promise<Definition[]> {
   if (!word || typeof word !== 'string') {
     throw new DictionaryError('Invalid word', 'INVALID_INPUT');
   }
 
   const url = `${config.wiktionary.baseUrl}/w/api.php`;
 
-  let response;
+  let response: AxiosResponse<WiktionaryResponse>;
   try {
-    response = await axios.get(url, {
+    response = await axios.get<WiktionaryResponse>(url, {
       params: { action: 'parse', page: word, prop: 'wikitext', format: 'json', utf8: '1' },
       timeout: WIKTIONARY_TIMEOUT_MS,
       headers: { 'User-Agent': 'DictionaryApp/1.0' },
       validateStatus: (s) => s < 500,
     });
   } catch (err) {
-    throw new DictionaryError(`Upstream dictionary unreachable: ${err.message}`, 'UPSTREAM_ERROR');
+    throw new DictionaryError(
+      `Upstream dictionary unreachable: ${err instanceof Error ? err.message : String(err)}`,
+      'UPSTREAM_ERROR'
+    );
   }
 
   validateApiResponse(response, word);
@@ -92,17 +108,17 @@ async function fetchDefinition(word) {
   return parsed;
 }
 
-function parseWiktionaryWikitext(wikitext) {
+export function parseWiktionaryWikitext(wikitext: unknown): Definition[] {
   if (!wikitext || typeof wikitext !== 'string') return [];
 
   // Wiktionary sometimes splits template parameters across lines; collapse them before line-by-line processing
   const normalized = wikitext.replace(/\n[ \t]*\|/g, ' |');
   const lines = normalized.split('\n');
 
-  const results = [];
+  const results: Definition[] = [];
   let inFrSection = false;
-  let currentPos = null;
-  let currentDef = null;
+  let currentPos: string | null = null;
+  let currentDef: Definition | null = null;
 
   for (const line of lines) {
     if (/^==\s*\{\{langue\|fr\}\}\s*==/.test(line)) {
@@ -121,7 +137,7 @@ function parseWiktionaryWikitext(wikitext) {
     if (posMatch) {
       if (currentDef) { results.push(currentDef); currentDef = null; }
       const posKey = posMatch[1].trim().toLowerCase();
-      currentPos = NON_DEF_SECTIONS.has(posKey) ? null : (POS_MAP[posKey] || capitalize(posKey));
+      currentPos = NON_DEF_SECTIONS.has(posKey) ? null : (POS_MAP[posKey] ?? capitalize(posKey));
       continue;
     }
 
@@ -144,7 +160,7 @@ function parseWiktionaryWikitext(wikitext) {
   return results;
 }
 
-function extractExampleText(line) {
+function extractExampleText(line: string): string {
   const content = line.replace(/^#\*\s*/, '');
 
   const exIdx = content.indexOf('{{exemple');
@@ -163,8 +179,8 @@ function extractExampleText(line) {
   return cleanWikitext(content);
 }
 
-function parseTemplateParams(s) {
-  const params = [];
+function parseTemplateParams(s: string): string[] {
+  const params: string[] = [];
   let i = 0;
 
   while (i < s.length && s[i] !== '|' && s[i] !== '}') i++;
@@ -198,7 +214,7 @@ function parseTemplateParams(s) {
   return params;
 }
 
-function removeTemplates(s) {
+function removeTemplates(s: string): string {
   let result = '';
   let depth = 0;
   let i = 0;
@@ -218,7 +234,7 @@ function removeTemplates(s) {
   return result;
 }
 
-function cleanWikitext(s) {
+export function cleanWikitext(s: unknown): string {
   if (typeof s !== 'string') return '';
   let r = s;
   r = r.replace(/\[https?:\/\/\S+\s+([^\]]+)\]/g, '$1');
@@ -230,13 +246,6 @@ function cleanWikitext(s) {
   return r.replace(/\s+/g, ' ').trim();
 }
 
-function capitalize(s) {
+function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
-
-module.exports = {
-  fetchDefinition,
-  parseWiktionaryWikitext,
-  cleanWikitext,
-  DictionaryError,
-};

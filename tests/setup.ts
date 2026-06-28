@@ -1,14 +1,15 @@
-const { newDb } = require('pg-mem');
-const fs = require('fs');
-const path = require('path');
-const { setPool, closePool } = require('../src/db/pool');
+import { newDb } from 'pg-mem';
+import fs from 'fs';
+import path from 'path';
+import type { Pool } from 'pg';
+import { setPool, closePool, getPool } from '../src/db/pool';
 
 const schemaPath = path.join(__dirname, '../src/db/schema.sql');
 
 beforeAll(async () => {
   const db = newDb();
-  const { Pool } = db.adapters.createPg();
-  const pool = new Pool();
+  const { Pool: PgMemPool } = db.adapters.createPg();
+  const pool = new PgMemPool();
 
   const statements = fs
     .readFileSync(schemaPath, 'utf8')
@@ -20,7 +21,7 @@ beforeAll(async () => {
     await pool.query(stmt);
   }
 
-  setPool(pool);
+  setPool(pool as unknown as Pool);
 });
 
 afterAll(async () => {
@@ -28,7 +29,6 @@ afterAll(async () => {
 });
 
 afterEach(async () => {
-  const { getPool } = require('../src/db/pool');
   const pool = getPool();
   await pool.query('DELETE FROM user_words');
   await pool.query('DELETE FROM definitions');

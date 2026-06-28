@@ -1,5 +1,6 @@
-const { sign, verify } = require('../../src/utils/jwt');
-const authMiddleware = require('../../src/middlewares/auth');
+import type { Request, Response, NextFunction } from 'express';
+import { sign, verify } from '../../src/utils/jwt';
+import authMiddleware from '../../src/middlewares/auth';
 
 describe('jwt utility', () => {
   it('signs and verifies a payload', () => {
@@ -16,47 +17,48 @@ describe('jwt utility', () => {
 });
 
 describe('auth middleware', () => {
-  function buildRes() {
-    return {
+  function buildRes(): Response {
+    const res = {
       statusCode: 200,
-      body: null,
-      status(code) { this.statusCode = code; return this; },
-      json(payload) { this.body = payload; return this; },
+      body: null as unknown,
+      status(code: number) { res.statusCode = code; return res; },
+      json(payload: unknown) { res.body = payload; return res; },
     };
+    return res as unknown as Response;
   }
 
   it('returns 401 when no Authorization header', () => {
-    const req = { headers: {} };
+    const req = { headers: {} } as unknown as Request;
     const res = buildRes();
-    const next = jest.fn();
+    const next = jest.fn() as unknown as NextFunction;
     authMiddleware(req, res, next);
-    expect(res.statusCode).toBe(401);
+    expect((res as unknown as { statusCode: number }).statusCode).toBe(401);
     expect(next).not.toHaveBeenCalled();
   });
 
   it('returns 401 with malformed header', () => {
-    const req = { headers: { authorization: 'NotBearer xyz' } };
+    const req = { headers: { authorization: 'NotBearer xyz' } } as unknown as Request;
     const res = buildRes();
-    const next = jest.fn();
+    const next = jest.fn() as unknown as NextFunction;
     authMiddleware(req, res, next);
-    expect(res.statusCode).toBe(401);
+    expect((res as unknown as { statusCode: number }).statusCode).toBe(401);
     expect(next).not.toHaveBeenCalled();
   });
 
   it('returns 401 with invalid token', () => {
-    const req = { headers: { authorization: 'Bearer not.a.jwt' } };
+    const req = { headers: { authorization: 'Bearer not.a.jwt' } } as unknown as Request;
     const res = buildRes();
-    const next = jest.fn();
+    const next = jest.fn() as unknown as NextFunction;
     authMiddleware(req, res, next);
-    expect(res.statusCode).toBe(401);
+    expect((res as unknown as { statusCode: number }).statusCode).toBe(401);
     expect(next).not.toHaveBeenCalled();
   });
 
   it('attaches userId and calls next on valid token', () => {
     const token = sign({ sub: 'abc-123', email: 'a@b.com' });
-    const req = { headers: { authorization: `Bearer ${token}` } };
+    const req = { headers: { authorization: `Bearer ${token}` } } as unknown as Request;
     const res = buildRes();
-    const next = jest.fn();
+    const next = jest.fn() as unknown as NextFunction;
     authMiddleware(req, res, next);
     expect(req.userId).toBe('abc-123');
     expect(req.user).toEqual({ id: 'abc-123', email: 'a@b.com' });

@@ -1,12 +1,12 @@
-const express = require('express');
-const { body, param, query } = require('express-validator');
-const validate = require('../middlewares/validate');
-const auth = require('../middlewares/auth');
-const ctrl = require('../controllers/wordController');
+import { Router } from 'express';
+import { body, param, query } from 'express-validator';
+import validate from '../middlewares/validate';
+import authMiddleware from '../middlewares/auth';
+import * as ctrl from '../controllers/wordController';
 
-const router = express.Router();
+const router = Router();
 
-router.use(auth);
+router.use(authMiddleware);
 
 /**
  * @openapi
@@ -195,4 +195,4 @@ router.delete(
   ctrl.remove
 );
 
-module.exports = router;
+export default router;
