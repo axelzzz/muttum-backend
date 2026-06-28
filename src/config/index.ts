@@ -7,7 +7,7 @@ interface Config {
   jwt: { secret: string; expiresIn: string };
   bcrypt: { saltRounds: number };
   wiktionary: { baseUrl: string };
-  cors: { origin: string };
+  cors: { origin: string | string[] };
 }
 
 const config: Config = {
@@ -25,7 +25,9 @@ const config: Config = {
     baseUrl: process.env.WIKTIONARY_BASE_URL ?? 'https://fr.wiktionary.org',
   },
   cors: {
-    origin: process.env.CORS_ORIGIN ?? '*',
+    origin: (process.env.CORS_ORIGIN ?? '*').includes(',')
+      ? (process.env.CORS_ORIGIN as string).split(',').map((o) => o.trim())
+      : (process.env.CORS_ORIGIN ?? '*'),
   },
 };
 
