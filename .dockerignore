@@ -3,3 +3,7 @@ dist
 .git
 *.md
 tests
+.env
+.env.*
+coverage
+swagger-token.txt
