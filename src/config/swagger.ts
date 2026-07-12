@@ -75,6 +75,28 @@ const spec = swaggerJsdoc({
             error: { type: 'string', example: 'Not found' },
           },
         },
+        Pagination: {
+          type: 'object',
+          properties: {
+            page: { type: 'integer', example: 1 },
+            limit: { type: 'integer', example: 20 },
+            total: { type: 'integer', example: 42 },
+            pages: { type: 'integer', example: 3 },
+          },
+        },
+        UserWordList: {
+          type: 'object',
+          properties: {
+            items: { type: 'array', items: { $ref: '#/components/schemas/UserWord' } },
+            pagination: { $ref: '#/components/schemas/Pagination' },
+          },
+        },
+        DeleteResult: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', example: '12' },
+          },
+        },
       },
     },
   },

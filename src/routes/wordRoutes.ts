@@ -79,9 +79,18 @@ router.get(
  *         schema:
  *           type: string
  *         description: Filter by word text
+ *       - in: query
+ *         name: favorite
+ *         schema:
+ *           type: boolean
+ *         description: Only return words marked as favorite
  *     responses:
  *       200:
  *         description: Paginated list of user words
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/UserWordList'
  */
 router.get(
   '/',
@@ -89,6 +98,7 @@ router.get(
     query('page').optional().isInt({ min: 1 }),
     query('limit').optional().isInt({ min: 1, max: 100 }),
     query('search').optional().isString().trim(),
+    query('favorite').optional().isBoolean(),
   ],
   validate,
   ctrl.list
@@ -107,12 +117,20 @@ router.get(
  *         name: id
  *         required: true
  *         schema:
- *           type: integer
+ *           type: string
  *     responses:
  *       200:
  *         description: UserWord document
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/UserWord'
  *       404:
  *         description: Not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.get(
   '/:id',
@@ -134,7 +152,7 @@ router.get(
  *         name: id
  *         required: true
  *         schema:
- *           type: integer
+ *           type: string
  *     requestBody:
  *       content:
  *         application/json:
@@ -153,8 +171,16 @@ router.get(
  *     responses:
  *       200:
  *         description: Updated UserWord
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/UserWord'
  *       404:
  *         description: Not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.patch(
   '/:id',
@@ -181,12 +207,20 @@ router.patch(
  *         name: id
  *         required: true
  *         schema:
- *           type: integer
+ *           type: string
  *     responses:
  *       200:
  *         description: Deletion confirmed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/DeleteResult'
  *       404:
  *         description: Not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.delete(
   '/:id',

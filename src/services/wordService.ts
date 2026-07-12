@@ -19,6 +19,10 @@ function toInt(id: string | number): number {
   return parseInt(String(id), 10);
 }
 
+function toBool(value: string | boolean | undefined): boolean {
+  return value === true || value === 'true';
+}
+
 interface UserWordRow {
   id: number;
   notes: string | null;
@@ -181,6 +185,7 @@ interface ListOptions {
   page?: string | number;
   limit?: string | number;
   search?: string;
+  favorite?: string | boolean;
 }
 
 export async function listUserWords(userId: string, options: ListOptions = {}): Promise<UserWordList> {
@@ -190,23 +195,24 @@ export async function listUserWords(userId: string, options: ListOptions = {}): 
   const safeLimit = Math.min(MAX_PAGE_LIMIT, Math.max(1, parseInt(String(options.limit ?? DEFAULT_PAGE_LIMIT), 10) || DEFAULT_PAGE_LIMIT));
   const offset = (safePage - 1) * safeLimit;
   const searchTerm = options.search ?? '';
+  const favoriteOnly = toBool(options.favorite);
 
   const [countRes, rowsRes] = await Promise.all([
     pool.query<{ total: string }>(
       `SELECT COUNT(*) AS total
        FROM user_words uw JOIN words w ON w.id = uw.word_id
-       WHERE uw.user_id = $1 AND ($2 = '' OR w.word ILIKE '%' || $2 || '%')`,
-      [numericUserId, searchTerm]
+       WHERE uw.user_id = $1 AND ($2 = '' OR w.word ILIKE '%' || $2 || '%') AND ($3 = false OR uw.favorite = true)`,
+      [numericUserId, searchTerm, favoriteOnly]
     ),
     pool.query<UserWordRow>(
       `SELECT uw.id, uw.notes, uw.tags, uw.favorite,
               uw.first_searched_at, uw.last_searched_at, uw.search_count,
               w.id AS word_id, w.word
        FROM user_words uw JOIN words w ON w.id = uw.word_id
-       WHERE uw.user_id = $1 AND ($2 = '' OR w.word ILIKE '%' || $2 || '%')
+       WHERE uw.user_id = $1 AND ($2 = '' OR w.word ILIKE '%' || $2 || '%') AND ($3 = false OR uw.favorite = true)
        ORDER BY uw.last_searched_at DESC
-       LIMIT $3 OFFSET $4`,
-      [numericUserId, searchTerm, safeLimit, offset]
+       LIMIT $4 OFFSET $5`,
+      [numericUserId, searchTerm, favoriteOnly, safeLimit, offset]
     ),
   ]);
 

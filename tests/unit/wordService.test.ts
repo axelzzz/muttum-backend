@@ -38,14 +38,14 @@ async function insertDefinitions(wordId: number, defs: Partial<Definition>[]): P
 async function insertUserWord(
   userId: number,
   wordId: number,
-  overrides: { lastSearchedAt?: Date; searchCount?: number } = {}
+  overrides: { lastSearchedAt?: Date; searchCount?: number; favorite?: boolean } = {}
 ): Promise<{ id: number }> {
   const pool = getPool();
   const lastSearchedAt = overrides.lastSearchedAt ?? new Date();
   const res = await pool.query<{ id: number }>(
-    `INSERT INTO user_words (user_id, word_id, last_searched_at, search_count)
-     VALUES ($1, $2, $3, $4) RETURNING *`,
-    [userId, wordId, lastSearchedAt, overrides.searchCount ?? 1]
+    `INSERT INTO user_words (user_id, word_id, last_searched_at, search_count, favorite)
+     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+    [userId, wordId, lastSearchedAt, overrides.searchCount ?? 1, overrides.favorite ?? false]
   );
   return res.rows[0];
 }
@@ -210,6 +210,34 @@ describe('wordService.listUserWords', () => {
 
     const r = await wordService.listUserWords(String(u1.id));
     expect(r.items).toHaveLength(0);
+  });
+
+  it('filters by favorite', async () => {
+    const user = await createUser();
+    const w1 = await insertWord('pomme');
+    const w2 = await insertWord('poire');
+    await insertDefinitions(w1.id, [{ definition: 'a' }]);
+    await insertDefinitions(w2.id, [{ definition: 'b' }]);
+    await insertUserWord(user.id, w1.id, { favorite: true });
+    await insertUserWord(user.id, w2.id, { favorite: false });
+
+    const r = await wordService.listUserWords(String(user.id), { favorite: true });
+    expect(r.items).toHaveLength(1);
+    expect(r.items[0].word).toBe('pomme');
+    expect(r.items[0].favorite).toBe(true);
+  });
+
+  it('returns all words when favorite is not set', async () => {
+    const user = await createUser();
+    const w1 = await insertWord('pomme');
+    const w2 = await insertWord('poire');
+    await insertDefinitions(w1.id, [{ definition: 'a' }]);
+    await insertDefinitions(w2.id, [{ definition: 'b' }]);
+    await insertUserWord(user.id, w1.id, { favorite: true });
+    await insertUserWord(user.id, w2.id, { favorite: false });
+
+    const r = await wordService.listUserWords(String(user.id));
+    expect(r.items).toHaveLength(2);
   });
 });
 

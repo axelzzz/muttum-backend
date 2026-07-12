@@ -201,6 +201,37 @@ describe('GET /api/words', () => {
     const res = await request(app).get('/api/words');
     expect(res.status).toBe(401);
   });
+
+  it('filters by favorite=true', async () => {
+    mockedFetchDefinition.mockResolvedValue(sampleDefs);
+    const { token } = await createUserAndToken();
+
+    await request(app).get('/api/words/search?word=alpha').set('Authorization', `Bearer ${token}`);
+    await request(app).get('/api/words/search?word=beta').set('Authorization', `Bearer ${token}`);
+    const list = await request(app).get('/api/words').set('Authorization', `Bearer ${token}`);
+    const alphaId = list.body.items.find((item: { word: string }) => item.word === 'alpha').id;
+
+    await request(app)
+      .patch(`/api/words/${alphaId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ favorite: true });
+
+    const res = await request(app)
+      .get('/api/words?favorite=true')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.items).toHaveLength(1);
+    expect(res.body.items[0].word).toBe('alpha');
+  });
+
+  it('returns 400 with an invalid favorite value', async () => {
+    const { token } = await createUserAndToken();
+    const res = await request(app)
+      .get('/api/words?favorite=notabool')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(400);
+  });
 });
 
 describe('GET /api/words/:id', () => {
