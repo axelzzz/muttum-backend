@@ -1,24 +1,22 @@
 import { newDb } from 'pg-mem';
-import fs from 'fs';
-import path from 'path';
 import type { Pool } from 'pg';
 import { setPool, closePool, getPool } from '../src/db/pool';
-
-const schemaPath = path.join(__dirname, '../src/db/schema.sql');
+import { readSchemaFiles } from '../src/db/migrationFiles';
 
 beforeAll(async () => {
   const db = newDb();
   const { Pool: PgMemPool } = db.adapters.createPg();
   const pool = new PgMemPool();
 
-  const statements = fs
-    .readFileSync(schemaPath, 'utf8')
-    .split(';')
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
+  for (const sql of readSchemaFiles()) {
+    const statements = sql
+      .split(';')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
 
-  for (const stmt of statements) {
-    await pool.query(stmt);
+    for (const stmt of statements) {
+      await pool.query(stmt);
+    }
   }
 
   setPool(pool as unknown as Pool);

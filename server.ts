@@ -1,13 +1,13 @@
 import createApp from './src/app';
 import config from './src/config';
 import { getPool } from './src/db/pool';
-import fs from 'fs';
-import path from 'path';
+import { readSchemaFiles } from './src/db/migrationFiles';
 
 async function start(): Promise<void> {
   const pool = getPool();
-  const schema = fs.readFileSync(path.join(__dirname, 'src/db/schema.sql'), 'utf8');
-  await pool.query(schema);
+  for (const sql of readSchemaFiles()) {
+    await pool.query(sql);
+  }
 
   const app = createApp();
   app.listen(config.port, () => {

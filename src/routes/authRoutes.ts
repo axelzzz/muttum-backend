@@ -126,4 +126,86 @@ router.post(
  */
 router.get('/me', authMiddleware, ctrl.me);
 
+/**
+ * @openapi
+ * /api/auth/forgot-password:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Request a password reset link by email
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email]
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *     responses:
+ *       200:
+ *         description: Generic confirmation — always returned, regardless of whether the email is registered
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/MessageResponse'
+ *       400:
+ *         description: Validation failed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.post(
+  '/forgot-password',
+  [body('email').isEmail().withMessage('Valid email required').normalizeEmail()],
+  validate,
+  ctrl.forgotPassword
+);
+
+/**
+ * @openapi
+ * /api/auth/reset-password:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Reset the password using the token received by email
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [token, password]
+ *             properties:
+ *               token:
+ *                 type: string
+ *               password:
+ *                 type: string
+ *                 minLength: 6
+ *                 maxLength: 128
+ *     responses:
+ *       200:
+ *         description: Password reset
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/MessageResponse'
+ *       400:
+ *         description: Invalid or expired token, or validation failed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.post(
+  '/reset-password',
+  [
+    body('token').isString().notEmpty(),
+    body('password').isString().isLength({ min: 6, max: 128 }),
+  ],
+  validate,
+  ctrl.resetPassword
+);
+
 export default router;

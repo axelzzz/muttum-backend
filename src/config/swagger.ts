@@ -75,6 +75,12 @@ const spec = swaggerJsdoc({
             error: { type: 'string', example: 'Not found' },
           },
         },
+        MessageResponse: {
+          type: 'object',
+          properties: {
+            message: { type: 'string', example: 'Mot de passe réinitialisé avec succès.' },
+          },
+        },
         Pagination: {
           type: 'object',
           properties: {

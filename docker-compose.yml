@@ -16,6 +16,12 @@ services:
       timeout: 5s
       retries: 5
 
+  maildev:
+    image: maildev/maildev
+    ports:
+      - "1080:1080"  # web UI to view captured emails
+      - "1025:1025"  # SMTP port
+
   backend:
     build: .
     ports:
@@ -28,9 +34,13 @@ services:
       WIKTIONARY_BASE_URL: ${WIKTIONARY_BASE_URL:-https://fr.wiktionary.org}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:8100}
       NODE_ENV: development
+      SMTP_HOST: maildev
+      SMTP_PORT: 1025
     depends_on:
       postgres:
         condition: service_healthy
+      maildev:
+        condition: service_started
 
 volumes:
   pgdata:
