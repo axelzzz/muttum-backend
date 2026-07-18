@@ -1,0 +1,71 @@
+name: Deploy backend
+
+on:
+  push:
+    branches: [develop, master]
+  pull_request:
+    branches: [develop]
+  workflow_dispatch:
+
+env:
+  SCW_CLI_VERSION: "2.58.3"
+  SCW_REGISTRY: rg.fr-par.scw.cloud/muttum
+  IMAGE_NAME: muttum-backend
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+
+  deploy:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Compute image tag
+        id: image
+        run: echo "tag=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Install Scaleway CLI
+        run: |
+          curl -fsSL "https://github.com/scaleway/scaleway-cli/releases/download/v${SCW_CLI_VERSION}/scaleway-cli_${SCW_CLI_VERSION}_linux_amd64" -o /usr/local/bin/scw
+          chmod +x /usr/local/bin/scw
+
+      - name: Configure Scaleway CLI
+        env:
+          SCW_ACCESS_KEY: ${{ secrets.SCW_ACCESS_KEY }}
+          SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
+          SCW_DEFAULT_ORGANIZATION_ID: ${{ secrets.SCW_ORGANIZATION_ID }}
+          SCW_DEFAULT_PROJECT_ID: ${{ secrets.SCW_PROJECT_ID }}
+          SCW_DEFAULT_REGION: fr-par
+        run: scw registry login
+
+      - name: Build and push image
+        run: |
+          docker build -t "$SCW_REGISTRY/$IMAGE_NAME:${{ steps.image.outputs.tag }}" .
+          docker push "$SCW_REGISTRY/$IMAGE_NAME:${{ steps.image.outputs.tag }}"
+
+      - name: Deploy new revision
+        env:
+          SCW_ACCESS_KEY: ${{ secrets.SCW_ACCESS_KEY }}
+          SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
+          SCW_DEFAULT_ORGANIZATION_ID: ${{ secrets.SCW_ORGANIZATION_ID }}
+          SCW_DEFAULT_PROJECT_ID: ${{ secrets.SCW_PROJECT_ID }}
+          SCW_DEFAULT_REGION: fr-par
+        run: |
+          scw container container update "${{ secrets.SCW_CONTAINER_ID }}" \
+            image="$SCW_REGISTRY/$IMAGE_NAME:${{ steps.image.outputs.tag }}" \
+            -w

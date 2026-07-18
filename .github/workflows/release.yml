@@ -1,0 +1,72 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Next snapshot version bump"
+        required: true
+        default: patch
+        type: choice
+        options: [patch, minor, major]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: develop
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_TOKEN }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Merge develop into master
+        run: |
+          git fetch origin
+          if git ls-remote --exit-code --heads origin master; then
+            git checkout -B master origin/master
+          else
+            git checkout -b master
+          fi
+          git merge --no-ff origin/develop -m "chore: merge develop into master"
+
+      - name: Strip -SNAPSHOT suffix and tag release
+        id: release
+        run: |
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          RELEASE_VERSION="${CURRENT_VERSION%-SNAPSHOT}"
+          npm version "$RELEASE_VERSION" --no-git-tag-version --allow-same-version
+          git add package.json package-lock.json
+          git commit -m "chore: release $RELEASE_VERSION"
+          git tag "v$RELEASE_VERSION"
+          echo "version=$RELEASE_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Push master and release tag
+        run: |
+          git push origin master
+          git push origin "v${{ steps.release.outputs.version }}"
+
+      - name: Merge master back into develop
+        run: |
+          git checkout develop
+          git merge --no-ff master -m "chore: merge master into develop after release ${{ steps.release.outputs.version }}"
+
+      - name: Bump develop to next snapshot version
+        run: |
+          NEXT_VERSION=$(npm version "${{ inputs.bump }}" --no-git-tag-version | sed 's/^v//')
+          npm pkg set version="${NEXT_VERSION}-SNAPSHOT"
+          git add package.json package-lock.json
+          git commit -m "chore: bump version to ${NEXT_VERSION}-SNAPSHOT"
+          git push origin develop
