@@ -27,6 +27,8 @@ Change history for `muttum-backend`, generated from Git commits and grouped by c
 
 ### Other
 
+- Extract a reusable `build` pipeline (lint + build + test + coverage + Sonar scan), called as a prerequisite by the deploy and release pipelines instead of duplicating those steps
+- Add SonarCloud analysis (coverage + quality gate) and README badges
 - Docker image version bump (`dc777ec`)
 - `.env.example` update (`dda3ecb`)
 - Support for multiple CORS origins (`35711a1`)

@@ -7,3 +7,4 @@ coverage/
 .vscode/
 .idea/
 DEV_TOOLS.md
+dist/

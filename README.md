@@ -1,5 +1,8 @@
 # Dictionary App - Backend
 
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=axelzzz_muttum-backend&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=axelzzz_muttum-backend)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=axelzzz_muttum-backend&metric=coverage)](https://sonarcloud.io/summary/new_code?id=axelzzz_muttum-backend)
+
 Node.js / Express / TypeScript / PostgreSQL backend for the Ionic dictionary application.
 
 ## Architecture
