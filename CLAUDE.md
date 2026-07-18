@@ -67,3 +67,7 @@ Domain types live in `src/types/index.ts` (`Definition`, `UserWordDto`, `SearchR
 ### Error handling convention
 
 Services throw plain `Error` objects with a `.status` property (400, 404, 502). The global `errorHandler` middleware reads `err.status` and responds accordingly. PostgreSQL-specific errors are also handled there by `code` (`23505` duplicate, `23503` foreign key, `23502`/`23514` constraint violations).
+
+## Changelog
+
+`CHANGELOG.md` must be updated for every feature, fix, or technical/refactor change made in this repo — not just at release time. Add an entry under the current unreleased version section, in the matching category (`Added`, `Fixed`, `Documentation`, `Other`, etc.), one line per change, with its commit hash once committed. Entries are written in English. Do not skip this step, even for small changes.
