@@ -7,6 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 npm run dev          # Start with nodemon (auto-reload)
 npm start            # Start without auto-reload (ts-node)
+npm run lint         # ESLint (flat config, typescript-eslint recommended)
 
 npm test             # All tests (unit + integration)
 npm run test:unit    # Unit tests only (tests/unit/)
