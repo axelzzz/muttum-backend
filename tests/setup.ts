@@ -25,10 +25,17 @@ beforeAll(async () => {
   const pool = new PgMemPool();
 
   for (const sql of readSchemaFiles()) {
-    const statements = sql
+    // pg-mem has no plpgsql support, and naively splitting on ';' would also
+    // mangle a DO block's internal statements — strip DO blocks wholesale,
+    // same treatment as CREATE EXTENSION below.
+    const withoutDoBlocks = sql.replace(/DO\s+\$\$[\s\S]*?\$\$\s*;/gi, '');
+    const statements = withoutDoBlocks
       .split(';')
       .map((s) => s.trim())
-      .filter((s) => s.length > 0 && !/^CREATE EXTENSION/i.test(s));
+      .filter((s) => s.length > 0 && !/^CREATE EXTENSION/i.test(s))
+      // A fragment can be comment-only (e.g. leftovers next to a stripped DO
+      // block) — that has no SQL command for pg-mem to execute.
+      .filter((s) => s.replace(/--.*$/gm, '').trim().length > 0);
 
     for (const stmt of statements) {
       await pool.query(stmt);

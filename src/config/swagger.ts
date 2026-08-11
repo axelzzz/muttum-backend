@@ -38,7 +38,7 @@ const spec = swaggerJsdoc({
           properties: {
             partOfSpeech: { type: 'string', example: 'nom' },
             definition: { type: 'string', example: 'Meuble à quatre pieds.' },
-            examples: { type: 'array', items: { type: 'string' } },
+            example: { type: 'string', nullable: true },
           },
         },
         UserWord: {

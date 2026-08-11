@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS definitions (
   word_id        BIGINT     NOT NULL REFERENCES words(id) ON DELETE CASCADE,
   part_of_speech TEXT       NOT NULL DEFAULT '',
   definition     TEXT       NOT NULL,
-  examples       TEXT[]     NOT NULL DEFAULT '{}',
+  example        TEXT,
   position       SMALLINT   NOT NULL,
   UNIQUE (word_id, position)
 );

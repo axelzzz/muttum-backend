@@ -16,7 +16,7 @@ const mockedFetchDefinition = jest.mocked(dictionaryService.fetchDefinition);
 const app = createApp();
 
 const sampleDefs: Definition[] = [
-  { partOfSpeech: 'n.f.', definition: 'Capacité de découvrir par hasard.', examples: ['exemple'] },
+  { partOfSpeech: 'n.f.', definition: 'Capacité de découvrir par hasard.', example: 'exemple' },
 ];
 
 async function countWords(): Promise<number> {

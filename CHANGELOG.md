@@ -28,6 +28,7 @@ Change history for `muttum-backend`, generated from Git commits and grouped by c
 
 ### Other
 
+- Store only the first usage example per definition instead of every example found on Wiktionary, to reduce storage and match the low value of extra examples; `definitions.examples` (`TEXT[]`) is replaced by `definitions.example` (`TEXT`), with a migration backfilling the first existing example for already-cached words
 - Chain the release pipeline into deploy: it now calls `deploy.yml` with the exact release commit SHA once the release commit is pushed, instead of relying on the master push to trigger it separately
 - Extract a reusable `build` pipeline (lint + build + test + coverage + Sonar scan), called as a prerequisite by the deploy and release pipelines instead of duplicating those steps
 - Add SonarCloud analysis (coverage + quality gate) and README badges

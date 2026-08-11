@@ -38,11 +38,11 @@ export const expectedSerendipiteParsed: Definition[] = [
   {
     partOfSpeech: 'Nom commun',
     definition: 'Capacité de faire des découvertes par hasard.',
-    examples: ['La sérendipité a mené à plusieurs découvertes scientifiques.'],
+    example: 'La sérendipité a mené à plusieurs découvertes scientifiques.',
   },
   {
     partOfSpeech: 'Nom commun',
     definition: 'Une découverte heureuse et inattendue.',
-    examples: [],
+    example: null,
   },
 ];

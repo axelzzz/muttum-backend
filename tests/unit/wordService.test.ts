@@ -13,7 +13,7 @@ import type { Definition } from '../../src/types';
 const mockedFetchDefinition = jest.mocked(dictionaryService.fetchDefinition);
 
 const mockDefinitions: Definition[] = [
-  { partOfSpeech: 'n.f.', definition: 'Capacité de découvrir par hasard.', examples: [] },
+  { partOfSpeech: 'n.f.', definition: 'Capacité de découvrir par hasard.', example: null },
 ];
 
 async function insertWord(word: string, source = 'wiktionary'): Promise<{ id: number }> {
@@ -29,8 +29,8 @@ async function insertDefinitions(wordId: number, defs: Partial<Definition>[]): P
   const pool = getPool();
   for (let i = 0; i < defs.length; i++) {
     await pool.query(
-      'INSERT INTO definitions (word_id, part_of_speech, definition, examples, position) VALUES ($1, $2, $3, $4, $5)',
-      [wordId, defs[i].partOfSpeech ?? '', defs[i].definition, defs[i].examples ?? [], i]
+      'INSERT INTO definitions (word_id, part_of_speech, definition, example, position) VALUES ($1, $2, $3, $4, $5)',
+      [wordId, defs[i].partOfSpeech ?? '', defs[i].definition, defs[i].example ?? null, i]
     );
   }
 }

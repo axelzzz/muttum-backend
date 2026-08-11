@@ -146,13 +146,13 @@ export function parseWiktionaryWikitext(wikitext: unknown): Definition[] {
     if (/^# [^*#:]/.test(line)) {
       if (currentDef) results.push(currentDef);
       const defText = cleanWikitext(line.replace(/^# /, ''));
-      currentDef = defText ? { partOfSpeech: currentPos, definition: defText, examples: [] } : null;
+      currentDef = defText ? { partOfSpeech: currentPos, definition: defText, example: null } : null;
       continue;
     }
 
-    if (currentDef && /^#\*/.test(line)) {
+    if (currentDef && !currentDef.example && /^#\*/.test(line)) {
       const ex = extractExampleText(line);
-      if (ex) currentDef.examples.push(ex);
+      if (ex) currentDef.example = ex;
     }
   }
 

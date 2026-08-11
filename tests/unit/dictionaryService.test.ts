@@ -86,7 +86,19 @@ describe('dictionaryService', () => {
 `;
       const result = dictionaryService.parseWiktionaryWikitext(wt);
       expect(result).toHaveLength(1);
-      expect(result[0].examples).toHaveLength(0);
+      expect(result[0].example).toBeNull();
+    });
+
+    it('keeps only the first example when a definition has several', () => {
+      const wt = `== {{langue|fr}} ==
+=== {{S|nom|fr}} ===
+# Une définition.
+#* {{exemple|lang=fr|Premier exemple.}}
+#* {{exemple|lang=fr|Second exemple.}}
+`;
+      const result = dictionaryService.parseWiktionaryWikitext(wt);
+      expect(result).toHaveLength(1);
+      expect(result[0].example).toBe('Premier exemple.');
     });
   });
 

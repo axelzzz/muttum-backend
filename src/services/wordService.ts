@@ -38,7 +38,7 @@ interface UserWordRow {
 interface DefinitionRow {
   part_of_speech: string | null;
   definition: string;
-  examples: string[] | null;
+  example: string | null;
 }
 
 function formatUserWord(uw: UserWordRow, wordText: string, definitions: Definition[]): UserWordDto {
@@ -59,13 +59,13 @@ function buildDefinitions(rows: DefinitionRow[]): Definition[] {
   return rows.map((r) => ({
     partOfSpeech: r.part_of_speech ?? '',
     definition: r.definition,
-    examples: r.examples ?? [],
+    example: r.example ?? null,
   }));
 }
 
 async function getDefinitions(pool: Pool, wordId: number): Promise<Definition[]> {
   const res = await pool.query<DefinitionRow>(
-    'SELECT part_of_speech, definition, examples FROM definitions WHERE word_id = $1 ORDER BY position',
+    'SELECT part_of_speech, definition, example FROM definitions WHERE word_id = $1 ORDER BY position',
     [wordId]
   );
   return buildDefinitions(res.rows);
@@ -85,10 +85,10 @@ async function insertDefinitions(pool: Pool, wordId: number, definitions: Defini
   await Promise.all(
     definitions.map((def, i) =>
       pool.query(
-        `INSERT INTO definitions (word_id, part_of_speech, definition, examples, position)
+        `INSERT INTO definitions (word_id, part_of_speech, definition, example, position)
          VALUES ($1, $2, $3, $4, $5)
          ON CONFLICT (word_id, position) DO NOTHING`,
-        [wordId, def.partOfSpeech || '', def.definition, def.examples || [], i]
+        [wordId, def.partOfSpeech || '', def.definition, def.example ?? null, i]
       )
     )
   );
@@ -224,7 +224,7 @@ export async function listUserWords(userId: string, options: ListOptions = {}): 
   if (wordIds.length > 0) {
     const placeholders = wordIds.map((_, i) => `$${i + 1}`).join(', ');
     const defRes = await pool.query<DefinitionRow & { word_id: number }>(
-      `SELECT word_id, part_of_speech, definition, examples FROM definitions WHERE word_id IN (${placeholders}) ORDER BY word_id, position`,
+      `SELECT word_id, part_of_speech, definition, example FROM definitions WHERE word_id IN (${placeholders}) ORDER BY word_id, position`,
       wordIds
     );
     for (const row of defRes.rows) {
@@ -233,7 +233,7 @@ export async function listUserWords(userId: string, options: ListOptions = {}): 
       defsByWordId[key].push({
         partOfSpeech: row.part_of_speech ?? '',
         definition: row.definition,
-        examples: row.examples ?? [],
+        example: row.example ?? null,
       });
     }
   }
