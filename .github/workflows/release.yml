@@ -23,6 +23,8 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.release.outputs.sha }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -59,6 +61,7 @@ jobs:
           git commit -m "chore: release $RELEASE_VERSION"
           git tag "v$RELEASE_VERSION"
           echo "version=$RELEASE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Push master and release tag
         run: |
@@ -77,3 +80,10 @@ jobs:
           git add package.json package-lock.json
           git commit -m "chore: bump version to ${NEXT_VERSION}-SNAPSHOT"
           git push origin develop
+
+  deploy:
+    needs: release
+    uses: ./.github/workflows/deploy.yml
+    with:
+      ref: ${{ needs.release.outputs.sha }}
+    secrets: inherit

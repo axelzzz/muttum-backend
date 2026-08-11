@@ -201,7 +201,7 @@ export async function listUserWords(userId: string, options: ListOptions = {}): 
     pool.query<{ total: string }>(
       `SELECT COUNT(*) AS total
        FROM user_words uw JOIN words w ON w.id = uw.word_id
-       WHERE uw.user_id = $1 AND ($2 = '' OR w.word ILIKE '%' || $2 || '%') AND ($3 = false OR uw.favorite = true)`,
+       WHERE uw.user_id = $1 AND ($2 = '' OR unaccent(w.word) ILIKE '%' || unaccent($2) || '%') AND ($3 = false OR uw.favorite = true)`,
       [numericUserId, searchTerm, favoriteOnly]
     ),
     pool.query<UserWordRow>(
@@ -209,7 +209,7 @@ export async function listUserWords(userId: string, options: ListOptions = {}): 
               uw.first_searched_at, uw.last_searched_at, uw.search_count,
               w.id AS word_id, w.word
        FROM user_words uw JOIN words w ON w.id = uw.word_id
-       WHERE uw.user_id = $1 AND ($2 = '' OR w.word ILIKE '%' || $2 || '%') AND ($3 = false OR uw.favorite = true)
+       WHERE uw.user_id = $1 AND ($2 = '' OR unaccent(w.word) ILIKE '%' || unaccent($2) || '%') AND ($3 = false OR uw.favorite = true)
        ORDER BY uw.last_searched_at DESC
        LIMIT $4 OFFSET $5`,
       [numericUserId, searchTerm, favoriteOnly, safeLimit, offset]

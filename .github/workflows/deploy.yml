@@ -4,6 +4,11 @@ on:
   push:
     branches: [master]
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        required: false
+        type: string
 
 env:
   SCW_CLI_VERSION: "2.58.3"
@@ -13,19 +18,22 @@ env:
 jobs:
   build:
     uses: ./.github/workflows/build.yml
+    with:
+      ref: ${{ inputs.ref || github.ref }}
     secrets: inherit
 
   deploy:
     needs: build
-    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     environment: production
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.ref }}
 
       - name: Compute image tag
         id: image
-        run: echo "tag=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+        run: echo "tag=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Install Scaleway CLI
         run: |

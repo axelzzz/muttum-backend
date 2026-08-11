@@ -15,6 +15,7 @@ Change history for `muttum-backend`, generated from Git commits and grouped by c
 
 ### Fixed
 
+- `GET /api/words` search now matches regardless of accents (e.g. "cafe" finds "café") via the Postgres `unaccent` extension
 - FR definitions endpoint and adapted parsing (`00aee5a`)
 - Test fixes (`da5d638`)
 - Claude action (full git history + explicit `github_token`) (`5c5aeae`)
@@ -27,6 +28,7 @@ Change history for `muttum-backend`, generated from Git commits and grouped by c
 
 ### Other
 
+- Chain the release pipeline into deploy: it now calls `deploy.yml` with the exact release commit SHA once the release commit is pushed, instead of relying on the master push to trigger it separately
 - Extract a reusable `build` pipeline (lint + build + test + coverage + Sonar scan), called as a prerequisite by the deploy and release pipelines instead of duplicating those steps
 - Add SonarCloud analysis (coverage + quality gate) and README badges
 - Docker image version bump (`dc777ec`)

@@ -201,6 +201,17 @@ describe('wordService.listUserWords', () => {
     expect(r.items[0].word).toBe('pomme');
   });
 
+  it('matches words regardless of accents in the search term', async () => {
+    const user = await createUser();
+    const w = await insertWord('élève');
+    await insertDefinitions(w.id, [{ definition: 'a' }]);
+    await insertUserWord(user.id, w.id);
+
+    const r = await wordService.listUserWords(String(user.id), { search: 'eleve' });
+    expect(r.items).toHaveLength(1);
+    expect(r.items[0].word).toBe('élève');
+  });
+
   it('does not return words from another user', async () => {
     const u1 = await createUser({ email: 'u1@x.com' });
     const u2 = await createUser({ email: 'u2@x.com' });
