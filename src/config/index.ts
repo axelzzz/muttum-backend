@@ -14,7 +14,7 @@ interface Config {
 }
 
 const config: Config = {
-  port: parseInt(process.env.PORT ?? '3000', 10),
+  port: Number.parseInt(process.env.PORT ?? '3000', 10),
   nodeEnv: process.env.NODE_ENV ?? 'development',
   databaseUrl: process.env.DATABASE_URL ?? 'postgresql://localhost:5432/dictionary-app',
   jwt: {
@@ -22,7 +22,7 @@ const config: Config = {
     expiresIn: process.env.JWT_EXPIRES_IN ?? '7d',
   },
   bcrypt: {
-    saltRounds: parseInt(process.env.BCRYPT_SALT_ROUNDS ?? '12', 10),
+    saltRounds: Number.parseInt(process.env.BCRYPT_SALT_ROUNDS ?? '12', 10),
   },
   wiktionary: {
     baseUrl: process.env.WIKTIONARY_BASE_URL ?? 'https://fr.wiktionary.org',
@@ -35,14 +35,14 @@ const config: Config = {
   frontendUrl: process.env.FRONTEND_URL ?? 'http://localhost:4200',
   smtp: {
     host: process.env.SMTP_HOST ?? 'localhost',
-    port: parseInt(process.env.SMTP_PORT ?? '587', 10),
+    port: Number.parseInt(process.env.SMTP_PORT ?? '587', 10),
     secure: process.env.SMTP_SECURE === 'true',
     user: process.env.SMTP_USER ?? '',
     password: process.env.SMTP_PASSWORD ?? '',
     from: process.env.SMTP_FROM ?? 'Muttum <no-reply@muttum.app>',
   },
   passwordReset: {
-    tokenTtlMinutes: parseInt(process.env.PASSWORD_RESET_TOKEN_TTL_MINUTES ?? '60', 10),
+    tokenTtlMinutes: Number.parseInt(process.env.PASSWORD_RESET_TOKEN_TTL_MINUTES ?? '60', 10),
   },
 };
 

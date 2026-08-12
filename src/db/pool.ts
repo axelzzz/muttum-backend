@@ -4,9 +4,7 @@ import config from '../config';
 let _pool: Pool | null = null;
 
 export function getPool(): Pool {
-  if (!_pool) {
-    _pool = new Pool({ connectionString: config.databaseUrl });
-  }
+  _pool ??= new Pool({ connectionString: config.databaseUrl });
   return _pool;
 }
 
