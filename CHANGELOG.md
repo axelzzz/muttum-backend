@@ -15,6 +15,7 @@ Change history for `muttum-backend`, generated from Git commits and grouped by c
 
 ### Fixed
 
+- Docker image now ships `src/db/migrations/` alongside `schema.sql`, so SQL migrations actually run on production startup instead of being silently skipped
 - `GET /api/words` search now matches regardless of accents (e.g. "cafe" finds "café") via the Postgres `unaccent` extension
 - FR definitions endpoint and adapted parsing (`00aee5a`)
 - Test fixes (`da5d638`)
