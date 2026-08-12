@@ -3,7 +3,10 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 COPY . .
-RUN npm run build && mkdir -p dist/src/db && cp src/db/schema.sql dist/src/db/schema.sql
+RUN npm run build \
+  && mkdir -p dist/src/db \
+  && cp src/db/schema.sql dist/src/db/schema.sql \
+  && cp -r src/db/migrations dist/src/db/migrations
 
 FROM node:22-alpine
 WORKDIR /app
