@@ -8,9 +8,6 @@ interface Config {
   bcrypt: { saltRounds: number };
   wiktionary: { baseUrl: string };
   cors: { origin: string | string[] };
-  frontendUrl: string;
-  smtp: { host: string; port: number; secure: boolean; user: string; password: string; from: string };
-  passwordReset: { tokenTtlMinutes: number };
 }
 
 const config: Config = {
@@ -31,18 +28,6 @@ const config: Config = {
     origin: (process.env.CORS_ORIGIN ?? '*').includes(',')
       ? (process.env.CORS_ORIGIN as string).split(',').map((o) => o.trim())
       : (process.env.CORS_ORIGIN ?? '*'),
-  },
-  frontendUrl: process.env.FRONTEND_URL ?? 'http://localhost:4200',
-  smtp: {
-    host: process.env.SMTP_HOST ?? 'localhost',
-    port: Number.parseInt(process.env.SMTP_PORT ?? '587', 10),
-    secure: process.env.SMTP_SECURE === 'true',
-    user: process.env.SMTP_USER ?? '',
-    password: process.env.SMTP_PASSWORD ?? '',
-    from: process.env.SMTP_FROM ?? 'Muttum <no-reply@muttum.app>',
-  },
-  passwordReset: {
-    tokenTtlMinutes: Number.parseInt(process.env.PASSWORD_RESET_TOKEN_TTL_MINUTES ?? '60', 10),
   },
 };
 

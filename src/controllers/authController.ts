@@ -3,7 +3,6 @@ import bcrypt from 'bcryptjs';
 import { getPool } from '../db/pool';
 import { sign } from '../utils/jwt';
 import config from '../config';
-import * as passwordResetService from '../services/passwordResetService';
 import type { UserDto } from '../types';
 
 interface UserRow {
@@ -84,26 +83,6 @@ export async function me(req: Request, res: Response, next: NextFunction): Promi
       return;
     }
     res.json({ user: formatUser(user) });
-  } catch (err) {
-    next(err);
-  }
-}
-
-export async function forgotPassword(req: Request, res: Response, next: NextFunction): Promise<void> {
-  try {
-    const { email } = req.body as { email: string };
-    await passwordResetService.requestPasswordReset(email);
-    res.json({ message: 'Si un compte existe pour cet e-mail, un lien de réinitialisation a été envoyé.' });
-  } catch (err) {
-    next(err);
-  }
-}
-
-export async function resetPassword(req: Request, res: Response, next: NextFunction): Promise<void> {
-  try {
-    const { token, password } = req.body as { token: string; password: string };
-    await passwordResetService.resetPassword(token, password);
-    res.json({ message: 'Mot de passe réinitialisé avec succès.' });
   } catch (err) {
     next(err);
   }
